@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background-dark: #0a0a0a;
+  --color-neon-blue: #00f2ff;
+  --color-slate-950: #050505;
+  
+  --shadow-refined: 0 20px 50px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(0, 242, 255, 0.1);
+}
+
+@layer utilities {
+  .ultra-thin-border {
+    border-width: 0.5px;
+  }
+  .glass-effect {
+    backdrop-filter: blur(16px);
+    background-color: rgba(10, 10, 10, 0.75);
+  }
+  .border-white-5 {
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+}
+
+body {
+  background-color: var(--color-background-dark);
+  color: #e5e5e5;
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+}
+
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.terminal-glow {
+  box-shadow: var(--shadow-glow);
+}
