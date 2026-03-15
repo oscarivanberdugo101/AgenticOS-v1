@@ -121,8 +121,11 @@ async function startServer() {
     
     try {
       let text = "";
+      let triedLocal = false;
+      let localFailed = false;
 
-      if (modelType === "local") {
+      if (modelType === "local" || modelType === "mixed") {
+        triedLocal = true;
         try {
           const response = await fetch("http://localhost:11434/api/generate", {
             method: "POST",
@@ -139,10 +142,16 @@ async function startServer() {
           const data = await response.json();
           text = data.response;
         } catch (err) {
-          res.status(503).json({ error: "Ollama no disponible localmente." });
-          return;
+          localFailed = true;
+          if (modelType === "local") {
+            res.status(503).json({ error: "Ollama no disponible localmente." });
+            return;
+          }
+          console.warn("Local failed, falling back to cloud...");
         }
-      } else {
+      }
+
+      if (!text && (modelType === "cloud" || localFailed)) {
         const modelName = agentConfig.model || "gemini-1.5-flash";
         const result = await genAI.models.generateContent({ 
           model: modelName,
