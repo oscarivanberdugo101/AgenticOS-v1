@@ -44,12 +44,15 @@ import {
   ChevronRight,
   Github,
   MessageCircle,
-  Share2
+  Share2,
+  FolderOpen,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { Project, LogEntry, Activity } from './types';
 import { AgentOrchestrator, AGENTS } from './services/agentService';
 import { DashboardSection } from './components/DashboardSection';
+import { ProjectCard } from './components/ProjectCard';
 import { MinimalLanding } from './components/MinimalLanding';
 import { ProjectsSection } from './components/ProjectsSection';
 import { TeamSwarmSection } from './components/TeamSwarmSection';
@@ -69,7 +72,8 @@ import {
   orderBy, 
   getDoc,
   serverTimestamp,
-  getDocs
+  getDocs,
+  where
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
@@ -122,13 +126,14 @@ export default function App() {
   const [attachments, setAttachments] = useState<{name: string, content: string, type: string}[]>([]);
   const [isDiscoveryComplete, setIsDiscoveryComplete] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'comms' | 'team' | 'tutorial'>('dashboard');
+  const [viewingProjectDetails, setViewingProjectDetails] = useState(false);
   const [stage, setStage] = useState<'discovery' | 'kickoff' | 'development'>('discovery');
   const [kickoffMessages, setKickoffMessages] = useState<{agent: string, content: string, color: string}[]>([]);
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
-  const [modelSource, setModelSource] = useState<'cloud' | 'local'>('local'); // Default to local as requested
-  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('local'));
+  const [modelSource, setModelSource] = useState<'cloud' | 'local'>('cloud');
+  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('cloud'));
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const dragControls = useDragControls();
 
@@ -205,16 +210,36 @@ export default function App() {
 
   // Load projects from Firebase
   useEffect(() => {
-    const q = query(collection(db, 'projects'), orderBy('lastUpdated', 'desc'));
+    if (!user) {
+      setProjects([]);
+      return;
+    }
+    const q = query(
+      collection(db, 'projects'), 
+      where('ownerId', '==', user.uid),
+      orderBy('lastUpdated', 'desc')
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const projectsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Project));
       setProjects(projectsData);
+      
+      // Update stages and briefs from loaded projects
+      const newStages: Record<string, 'discovery' | 'kickoff' | 'development'> = {};
+      const newBriefs: Record<string, string | null> = {};
+      
+      projectsData.forEach(p => {
+        if (p.stage) newStages[p.id] = p.stage as 'discovery' | 'kickoff' | 'development';
+        if (p.brief) newBriefs[p.id] = p.brief;
+      });
+      
+      setProjectStages(prev => ({ ...prev, ...newStages }));
+      setProjectBriefs(prev => ({ ...prev, ...newBriefs }));
     }, (error) => {
       console.error("Firestore Error (projects):", error);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   // Load project-specific data when activeProjectId changes
   useEffect(() => {
@@ -627,13 +652,14 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar Navigation */}
-        <aside 
-          className={`hidden lg:flex ${isSidebarExpanded ? 'w-80' : 'w-24'} border-r border-white/5 p-6 flex-col gap-10 bg-black/50 overflow-y-auto overflow-x-hidden transition-all duration-500 ease-in-out z-40`}
-          onMouseEnter={handleSidebarMouseEnter}
-          onMouseLeave={handleSidebarMouseLeave}
-        >
+        <div className="hidden lg:block w-24 shrink-0 relative z-50">
+          <aside 
+            className={`absolute left-0 top-0 bottom-0 flex flex-col ${isSidebarExpanded ? 'w-80' : 'w-24'} border-r border-white/5 p-6 gap-10 bg-black/90 backdrop-blur-xl overflow-y-auto overflow-x-hidden transition-all duration-500 ease-in-out`}
+            onMouseEnter={handleSidebarMouseEnter}
+            onMouseLeave={handleSidebarMouseLeave}
+          >
           <div className="space-y-8">
             <div>
               <p className={`px-2 text-[9px] font-black uppercase tracking-[0.4em] text-neutral-600 mb-6 transition-opacity duration-300 ${isSidebarExpanded ? 'opacity-100' : 'opacity-0'}`}>
@@ -733,6 +759,7 @@ export default function App() {
             </div>
           </div>
         </aside>
+        </div>
 
         {/* Content Area */}
         <div className="flex-1 flex flex-col min-w-0 relative">
@@ -766,12 +793,75 @@ export default function App() {
                     <h2 className="text-5xl font-extralight text-white tracking-tighter">Proyectos</h2>
                     <p className="text-neutral-500 text-[10px] uppercase tracking-[0.5em] font-black">Central de Consolidación de Software</p>
                   </div>
+                  <div className="flex gap-4">
+                    {viewingProjectDetails && (
+                      <button 
+                        onClick={() => setViewingProjectDetails(false)}
+                        className="px-8 py-4 bg-white/5 border border-white/10 text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-xl hover:bg-white/10 transition-all"
+                      >
+                        Volver a la Lista
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => {
+                        setActiveProjectId(null);
+                        setActiveTab('comms');
+                      }}
+                      className="px-8 py-4 bg-white text-black text-[10px] font-black uppercase tracking-[0.3em] rounded-xl hover:bg-neon-blue transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(0,242,255,0.3)]"
+                    >
+                      Nuevo Proyecto
+                    </button>
+                  </div>
                 </div>
                 
-                <CodeViewer 
-                  artifacts={activeProjectId ? (projectArtifacts[activeProjectId] || {}) : artifacts}
-                  onDownload={downloadZip}
-                />
+                {!viewingProjectDetails ? (
+                  projects.length === 0 ? (
+                    <div className="text-center py-20 bg-white/[0.02] border border-white/5 rounded-3xl">
+                      <FolderOpen size={48} className="mx-auto text-neutral-600 mb-6" />
+                      <h3 className="text-xl text-white font-medium mb-2">No hay proyectos iniciados</h3>
+                      <p className="text-neutral-500 text-sm mb-8">Comienza una consultoría con el Director para crear tu primer proyecto.</p>
+                      <button 
+                        onClick={() => setActiveTab('comms')}
+                        className="px-6 py-3 bg-neon-blue/10 text-neon-blue border border-neon-blue/20 rounded-xl hover:bg-neon-blue hover:text-black transition-all text-xs font-bold uppercase tracking-widest"
+                      >
+                        Ir al Director
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {projects.map(project => (
+                        <ProjectCard 
+                          key={project.id} 
+                          project={project} 
+                          onClick={() => {
+                            setActiveProjectId(project.id);
+                            setViewingProjectDetails(true);
+                          }} 
+                        />
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <div className="space-y-8">
+                    <div className="flex items-center justify-between bg-white/[0.02] border border-white/5 p-6 rounded-2xl">
+                      <div>
+                        <h3 className="text-xl font-bold text-white mb-2">{projects.find(p => p.id === activeProjectId)?.title}</h3>
+                        <p className="text-sm text-neutral-400">{projects.find(p => p.id === activeProjectId)?.description}</p>
+                      </div>
+                      <button 
+                        onClick={() => setActiveTab('comms')}
+                        className="px-6 py-3 bg-neon-blue/10 text-neon-blue border border-neon-blue/20 rounded-xl hover:bg-neon-blue hover:text-black transition-all text-xs font-bold uppercase tracking-widest flex items-center gap-2"
+                      >
+                        <MessageSquare size={16} />
+                        Continuar Chat
+                      </button>
+                    </div>
+                    <CodeViewer 
+                      artifacts={activeProjectId ? (projectArtifacts[activeProjectId] || {}) : artifacts}
+                      onDownload={downloadZip}
+                    />
+                  </div>
+                )}
               </div>
             ) : activeTab === 'team' ? (
               <TeamSwarmSection projects={projects} />
@@ -896,11 +986,12 @@ export default function App() {
         </div>
 
         {/* Right-side Activity Overlay */}
-        <aside 
-          className={`hidden 2xl:flex flex-col ${isRightSidebarExpanded ? 'w-96' : 'w-24'} bg-black/30 border-l border-white/5 p-8 overflow-y-auto overflow-x-hidden transition-all duration-500 ease-in-out z-40`}
-          onMouseEnter={() => setIsRightSidebarExpanded(true)}
-          onMouseLeave={() => setIsRightSidebarExpanded(false)}
-        >
+        <div className="hidden 2xl:block w-24 shrink-0 relative z-50">
+          <aside 
+            className={`absolute right-0 top-0 bottom-0 flex flex-col ${isRightSidebarExpanded ? 'w-96' : 'w-24'} bg-black/90 backdrop-blur-xl border-l border-white/5 p-8 overflow-y-auto overflow-x-hidden transition-all duration-500 ease-in-out`}
+            onMouseEnter={() => setIsRightSidebarExpanded(true)}
+            onMouseLeave={() => setIsRightSidebarExpanded(false)}
+          >
           <div className={`space-y-10 transition-all duration-500 ${isRightSidebarExpanded ? 'opacity-100' : 'opacity-0 scale-95 pointer-events-none'}`}>
             <h4 className="text-[9px] font-black text-white uppercase tracking-[0.4em] mb-12 flex items-center gap-4">
               <span className="w-3 h-[1px] bg-white"></span>
@@ -1026,6 +1117,7 @@ export default function App() {
           <div className={`absolute inset-0 flex flex-col items-center py-12 gap-10 transition-all duration-500 ${isRightSidebarExpanded ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           </div>
         </aside>
+        </div>
         
         {/* Serafina Floating Agent */}
         <SerafinaFloatingAgent />

@@ -12,7 +12,7 @@ export const ProjectCard = ({ project, onClick }: ProjectCardProps) => (
   <motion.div
     whileHover={{ y: -4 }}
     onClick={onClick}
-    className="group bg-white/[0.02] border border-white/5 p-6 rounded-3xl hover:bg-white/[0.04] hover:border-white/10 transition-all cursor-pointer relative overflow-hidden"
+    className="group bg-white/[0.02] border border-white/5 p-6 rounded-3xl hover:bg-white/[0.04] hover:border-white/10 transition-colors cursor-pointer relative overflow-hidden"
   >
     <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
       <ExternalLink size={14} className="text-neon-blue" />

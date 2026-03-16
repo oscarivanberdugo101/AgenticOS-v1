@@ -65,7 +65,7 @@ export const SerafinaFloatingAgent = () => {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className={`size-14 rounded-2xl flex items-center justify-center shadow-2xl transition-all duration-500 ${
+        className={`size-14 rounded-2xl flex items-center justify-center shadow-2xl transition-colors duration-500 ${
           isOpen ? 'bg-white text-black' : 'bg-neon-blue text-black shadow-[0_0_30px_rgba(0,243,255,0.3)]'
         }`}
       >

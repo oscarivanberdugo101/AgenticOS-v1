@@ -7,6 +7,14 @@ interface DashboardSectionProps {
   onStartProject?: () => void;
 }
 
+const PARTICLES = [...Array(15)].map(() => ({
+  x: Math.random() * 1000 - 500,
+  y: Math.random() * 1000 - 500,
+  targetY: Math.random() * -200 - 100,
+  duration: Math.random() * 5 + 5,
+  delay: Math.random() * 5
+}));
+
 export const DashboardSection = ({ projectsCount, onStartProject }: DashboardSectionProps) => {
   const isIdle = projectsCount === 0;
   const [isHoveringCore, setIsHoveringCore] = useState(false);
@@ -20,24 +28,24 @@ export const DashboardSection = ({ projectsCount, onStartProject }: DashboardSec
       </div>
 
       {/* Floating Data Particles */}
-      {!isIdle && [...Array(15)].map((_, i) => (
+      {!isIdle && PARTICLES.map((particle, i) => (
         <motion.div
           key={i}
           initial={{ 
-            x: Math.random() * 1000 - 500, 
-            y: Math.random() * 1000 - 500,
+            x: particle.x, 
+            y: particle.y,
             opacity: 0 
           }}
           animate={{ 
-            y: [null, Math.random() * -200 - 100],
+            y: [null, particle.targetY],
             opacity: [0, 0.3, 0],
             scale: [0, 1, 0]
           }}
           transition={{ 
-            duration: Math.random() * 5 + 5, 
+            duration: particle.duration, 
             repeat: Infinity,
             ease: "linear",
-            delay: Math.random() * 5
+            delay: particle.delay
           }}
           className="absolute size-1 bg-neon-blue rounded-full blur-[1px]"
         />
@@ -225,7 +233,7 @@ export const DashboardSection = ({ projectsCount, onStartProject }: DashboardSec
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.2 + i * 0.2 }}
-              className="relative group p-8 bg-white/[0.02] border border-white/5 rounded-[2rem] hover:bg-white/[0.04] hover:border-white/10 transition-all duration-500 overflow-hidden"
+              className="relative group p-8 bg-white/[0.02] border border-white/5 rounded-[2rem] hover:bg-white/[0.04] hover:border-white/10 transition-colors duration-500 overflow-hidden"
             >
               <div className="absolute top-0 left-0 w-1 h-full bg-neon-blue scale-y-0 group-hover:scale-y-100 transition-transform origin-top duration-500" />
               

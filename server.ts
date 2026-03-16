@@ -151,7 +151,9 @@ async function startServer() {
           console.error("Error detallado al conectar con Ollama:", err);
           localFailed = true;
           if (modelType === "local") {
-            res.status(503).json({ error: "Ollama no disponible localmente. Asegúrate de que esté corriendo." });
+            res.status(503).json({ 
+              error: "No se pudo conectar con Ollama. Nota: En el entorno de vista previa en la nube, 'Local' no funcionará porque Ollama no está instalado en el contenedor. Por favor, cambia a 'Cloud' (Gemini) en el menú de la izquierda, o ejecuta la aplicación localmente en tu computadora." 
+            });
             return;
           }
           console.warn("Local failed, falling back to cloud...");

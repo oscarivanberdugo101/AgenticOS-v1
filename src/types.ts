@@ -15,6 +15,9 @@ export interface Project {
   health: 'Healthy' | 'Warning' | 'Critical';
   lastUpdated: string;
   activeAgents: string[];
+  ownerId?: string;
+  stage?: 'discovery' | 'kickoff' | 'development';
+  brief?: string;
 }
 
 export interface LogEntry {
