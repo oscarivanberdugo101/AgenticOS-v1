@@ -117,7 +117,6 @@ export default function App() {
     }, 200);
   };
   const [isRightSidebarExpanded, setIsRightSidebarExpanded] = useState(false);
-  const [currentTask, setCurrentTask] = useState("");
   const [artifacts, setArtifacts] = useState<Record<string, string>>({});
   const [discoveryBrief, setDiscoveryBrief] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([]);
@@ -261,8 +260,7 @@ export default function App() {
   }, [activeProjectId]);
 
   const handleDiscoveryChat = async (messageOverride?: string | React.MouseEvent) => {
-    const isStringOverride = typeof messageOverride === 'string';
-    const userMsg = isStringOverride ? messageOverride : currentTask;
+    const userMsg = typeof messageOverride === 'string' ? messageOverride : '';
     if (!userMsg || isPipelineRunning) return;
     
     const attContext = buildAttachmentsContext();
@@ -283,10 +281,7 @@ export default function App() {
       });
     }
 
-    setChatMessages(prev => [...prev, { role: 'user', content: userMsg as string }]);
-    if (!isStringOverride) {
-      setCurrentTask("");
-    }
+    setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setAttachments([]);
     setIsPipelineRunning(true);
     setActiveAgentId('director');
@@ -429,9 +424,12 @@ export default function App() {
     setActiveAgentId(null);
   };
 
+  const [globalError, setGlobalError] = useState<string | null>(null);
+
   const handleStartProject = async (config: any) => {
+    setGlobalError(null);
     if (!user) {
-      alert("Debes iniciar sesión para crear un proyecto.");
+      setGlobalError("Debes iniciar sesión con Google (arriba a la derecha) para crear un proyecto.");
       throw new Error("User not authenticated");
     }
 
@@ -468,9 +466,9 @@ export default function App() {
     } catch (err: any) {
       console.error("Error creating project:", err);
       if (err.message === "Firestore connection timeout") {
-        alert("Error: No se pudo conectar a la base de datos. Por favor, asegúrate de haber habilitado 'Firestore Database' en tu consola de Firebase.");
+        setGlobalError("Error: No se pudo conectar a la base de datos. Por favor, asegúrate de haber habilitado 'Firestore Database' en tu consola de Firebase.");
       } else {
-        alert("Error al crear el proyecto. Revisa los permisos de Firebase.");
+        setGlobalError("Error al crear el proyecto. Revisa los permisos de Firebase.");
       }
       throw err;
     }
@@ -741,6 +739,18 @@ export default function App() {
         <div className="flex-1 flex flex-col min-w-0 relative">
 
           <main className="flex-1 p-10 lg:p-16 overflow-y-auto custom-scrollbar">
+            {globalError && (
+              <div className="max-w-7xl mx-auto mb-6 bg-red-500/10 border border-red-500/50 text-red-400 px-6 py-4 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertCircle size={20} />
+                  <p className="text-sm font-medium">{globalError}</p>
+                </div>
+                <button onClick={() => setGlobalError(null)} className="text-red-400 hover:text-white transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+            
               {activeTab === 'dashboard' ? (
                 projects.length === 0 ? (
                   <MinimalLanding onStartProject={() => setActiveTab('comms')} />
@@ -777,8 +787,6 @@ export default function App() {
                 attachments={attachments}
                 setAttachments={setAttachments}
                 handleFileUpload={handleFileUpload}
-                userInput={currentTask}
-                setUserInput={setCurrentTask}
                 handleSendMessage={handleDiscoveryChat}
                 chatEndRef={chatEndRef}
                 discoveryBrief={activeProjectId ? (projectBriefs[activeProjectId] || null) : discoveryBrief}

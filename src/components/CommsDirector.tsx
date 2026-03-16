@@ -31,8 +31,6 @@ interface CommsDirectorProps {
   attachments: any[];
   setAttachments: (attachments: any) => void;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  userInput: string;
-  setUserInput: (input: string) => void;
   handleSendMessage: (msg?: string | React.MouseEvent) => void;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
   discoveryBrief: string | null;
@@ -49,11 +47,12 @@ interface CommsDirectorProps {
 export const CommsDirector = ({ 
   stage, chatMessages, streamingText, activeAgentId, 
   attachments, setAttachments, handleFileUpload, 
-  userInput, setUserInput, handleSendMessage, chatEndRef,
+  handleSendMessage, chatEndRef,
   discoveryBrief, startKickoff, kickoffMessages, isPipelineRunning, runDevelopmentPipeline,
   projects = [], activeProjectId, onSelectProject, onStartProject
 }: CommsDirectorProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [localInput, setLocalInput] = useState("");
   const [showConfigForm, setShowConfigForm] = useState(chatMessages.length === 0);
   const [isStarting, setIsStarting] = useState(false);
   const [config, setConfig] = useState({
@@ -173,7 +172,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         value={config.name}
                         onChange={(e) => setConfig({...config, name: e.target.value})}
                         placeholder="Ej: E-commerce Global"
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-0"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all duration-300"
                       />
                     </div>
 
@@ -183,7 +182,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         value={config.description}
                         onChange={(e) => setConfig({...config, description: e.target.value})}
                         placeholder="¿Qué quieres construir? Describe la funcionalidad principal..."
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-0 min-h-[120px] resize-none"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all duration-300 min-h-[120px] resize-none"
                       />
                     </div>
 
@@ -193,7 +192,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.frontend}
                           onChange={(e) => setConfig({...config, frontend: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all duration-300 appearance-none"
                         >
                           <option value="Next.js">Next.js</option>
                           <option value="React (Vite)">React (Vite)</option>
@@ -209,7 +208,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.backend}
                           onChange={(e) => setConfig({...config, backend: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all duration-300 appearance-none"
                         >
                           <option value="Node.js (Express)">Node.js (Express)</option>
                           <option value="Python (FastAPI)">Python (FastAPI)</option>
@@ -224,7 +223,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.database}
                           onChange={(e) => setConfig({...config, database: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all duration-300 appearance-none"
                         >
                           <option value="PostgreSQL">PostgreSQL</option>
                           <option value="MongoDB">MongoDB</option>
@@ -240,7 +239,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.styling}
                           onChange={(e) => setConfig({...config, styling: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all duration-300 appearance-none"
                         >
                           <option value="Tailwind CSS">Tailwind CSS</option>
                           <option value="Shadcn UI">Shadcn UI</option>
@@ -368,12 +367,15 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                   <div className="flex gap-4 items-end">
                     <div className="flex-1 relative">
                       <textarea 
-                        value={userInput}
-                        onChange={(e) => setUserInput(e.target.value)}
+                        value={localInput}
+                        onChange={(e) => setLocalInput(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault();
-                            handleSendMessage();
+                            if (localInput.trim() || attachments.length > 0) {
+                              handleSendMessage(localInput);
+                              setLocalInput("");
+                            }
                           }
                         }}
                         placeholder="Describe tu proyecto o haz una pregunta..."
@@ -389,8 +391,11 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <Plus size={18} />
                       </button>
                       <button 
-                        onClick={handleSendMessage}
-                        disabled={!userInput.trim() && attachments.length === 0}
+                        onClick={() => {
+                          handleSendMessage(localInput);
+                          setLocalInput("");
+                        }}
+                        disabled={!localInput.trim() && attachments.length === 0}
                         className="p-2.5 bg-neon-blue text-black rounded-xl hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(0,242,255,0.3)]"
                         title="Enviar Mensaje (Enter)"
                       >

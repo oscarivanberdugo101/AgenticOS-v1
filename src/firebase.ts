@@ -14,6 +14,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-export const db = getFirestore(app);
+// Initialize Firestore with the specific database ID from the screenshot
+console.log("Inicializando Firestore con ID: ai-studio-d377fa67-348e-4d0d-a9bc-4200126d59b3");
+export const db = getFirestore(app, "ai-studio-d377fa67-348e-4d0d-a9bc-4200126d59b3");
 
 export default app;
