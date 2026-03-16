@@ -72,7 +72,7 @@ import {
   serverTimestamp,
   getDocs
 } from 'firebase/firestore';
-import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
 
 const INITIAL_PROJECTS: Project[] = [];
@@ -131,7 +131,7 @@ export default function App() {
   const [streamingText, setStreamingText] = useState("");
   const [modelSource, setModelSource] = useState<'cloud' | 'local'>('local'); // Default to local as requested
   const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('local'));
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const dragControls = useDragControls();
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -452,14 +452,26 @@ export default function App() {
     } as any;
     
     try {
-      await setDoc(doc(db, 'projects', projectId), newProject);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Firestore connection timeout")), 8000)
+      );
+      
+      await Promise.race([
+        setDoc(doc(db, 'projects', projectId), newProject),
+        timeoutPromise
+      ]);
+      
       setActiveProjectId(projectId);
       setActiveTab('comms');
       setStage('discovery');
       return projectId;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating project:", err);
-      alert("Error al crear el proyecto. Revisa los permisos de Firebase.");
+      if (err.message === "Firestore connection timeout") {
+        alert("Error: No se pudo conectar a la base de datos. Por favor, asegúrate de haber habilitado 'Firestore Database' en tu consola de Firebase.");
+      } else {
+        alert("Error al crear el proyecto. Revisa los permisos de Firebase.");
+      }
       throw err;
     }
   };
