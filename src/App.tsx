@@ -59,7 +59,6 @@ import { CodeViewer } from './components/CodeViewer';
 import { SidebarItem, SidebarGroup, SidebarSubItem, SidebarFolder } from './components/Sidebar';
 import { SerafinaFloatingAgent } from './components/SerafinaFloatingAgent';
 import { BotLine } from './components/BotLine';
-import { db } from './firebase';
 import { 
   collection, 
   onSnapshot, 
