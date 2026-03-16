@@ -59,7 +59,7 @@ import { CodeViewer } from './components/CodeViewer';
 import { SidebarItem, SidebarGroup, SidebarSubItem, SidebarFolder } from './components/Sidebar';
 import { SerafinaFloatingAgent } from './components/SerafinaFloatingAgent';
 import { BotLine } from './components/BotLine';
-import { db, auth, googleProvider, githubProvider } from './firebase';
+import { db } from './firebase';
 import { 
   collection, 
   onSnapshot, 
@@ -72,7 +72,8 @@ import {
   serverTimestamp,
   getDocs
 } from 'firebase/firestore';
-import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import { db, auth, googleProvider } from './firebase';
 
 const INITIAL_PROJECTS: Project[] = [];
 
@@ -90,6 +91,7 @@ const ACTIVITIES: Activity[] = [
 ];
 
 export default function App() {
+  console.log("App component rendering");
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectChats, setProjectChats] = useState<Record<string, {role: 'user' | 'assistant', content: string}[]>>({});
@@ -127,13 +129,19 @@ export default function App() {
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
-  const [modelSource, setModelSource] = useState<'cloud' | 'local'>('cloud');
-  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('cloud'));
-  const [user, setUser] = useState<any>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [modelSource, setModelSource] = useState<'cloud' | 'local'>('local'); // Default to local as requested
+  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('local'));
+  const [user, setUser] = useState<User | null>(null);
   const dragControls = useDragControls();
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -142,6 +150,23 @@ export default function App() {
   useEffect(() => {
     setOrchestrator(new AgentOrchestrator(modelSource));
   }, [modelSource]);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setActiveTab('dashboard');
+    } catch (error) {
+      console.error("Error signing in with Google", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out", error);
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -180,42 +205,8 @@ export default function App() {
     return context;
   };
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setIsAuthReady(true);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user') {
-        console.log("User closed the login popup.");
-      } else {
-        console.error("Login error:", err);
-      }
-    }
-  };
-
-  const handleGithubLogin = async () => {
-    try {
-      await signInWithPopup(auth, githubProvider);
-    } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user') {
-        console.log("User closed the login popup.");
-      } else {
-        console.error("Github login error:", err);
-      }
-    }
-  };
-
   // Load projects from Firebase
   useEffect(() => {
-    if (!isAuthReady || !user) return;
-
     const q = query(collection(db, 'projects'), orderBy('lastUpdated', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const projectsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Project));
@@ -225,11 +216,11 @@ export default function App() {
     });
 
     return () => unsubscribe();
-  }, [isAuthReady, user]);
+  }, []);
 
   // Load project-specific data when activeProjectId changes
   useEffect(() => {
-    if (!activeProjectId || !isAuthReady || !user) return;
+    if (!activeProjectId) return;
 
     // Load chats
     const chatUnsubscribe = onSnapshot(
@@ -267,12 +258,13 @@ export default function App() {
       chatUnsubscribe();
       artifactUnsubscribe();
     };
-  }, [activeProjectId, isAuthReady, user]);
+  }, [activeProjectId]);
 
-  const handleDiscoveryChat = async () => {
-    if (!currentTask || isPipelineRunning || !user) return;
+  const handleDiscoveryChat = async (messageOverride?: string | React.MouseEvent) => {
+    const isStringOverride = typeof messageOverride === 'string';
+    const userMsg = isStringOverride ? messageOverride : currentTask;
+    if (!userMsg || isPipelineRunning) return;
     
-    const userMsg = currentTask;
     const attContext = buildAttachmentsContext();
     
     const history = activeProjectId ? (projectChats[activeProjectId] || []) : chatMessages;
@@ -291,8 +283,10 @@ export default function App() {
       });
     }
 
-    setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setCurrentTask("");
+    setChatMessages(prev => [...prev, { role: 'user', content: userMsg as string }]);
+    if (!isStringOverride) {
+      setCurrentTask("");
+    }
     setAttachments([]);
     setIsPipelineRunning(true);
     setActiveAgentId('director');
@@ -436,7 +430,10 @@ export default function App() {
   };
 
   const handleStartProject = async (config: any) => {
-    if (!user) return;
+    if (!user) {
+      alert("Debes iniciar sesión para crear un proyecto.");
+      throw new Error("User not authenticated");
+    }
 
     const projectId = Math.random().toString(36).substr(2, 9);
     const newProject: Project = {
@@ -459,8 +456,11 @@ export default function App() {
       setActiveProjectId(projectId);
       setActiveTab('comms');
       setStage('discovery');
+      return projectId;
     } catch (err) {
       console.error("Error creating project:", err);
+      alert("Error al crear el proyecto. Revisa los permisos de Firebase.");
+      throw err;
     }
   };
 
@@ -579,21 +579,26 @@ export default function App() {
               placeholder="Search command..."
             />
           </div>
-          <div className="flex gap-6">
-            {user ? (
-              <button 
-                onClick={() => auth.signOut()}
-                className="text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-white transition-all"
-              >
-                Logout
-              </button>
-            ) : (
+          <div className="flex gap-6 items-center">
+            {!user ? (
               <button 
                 onClick={handleLogin}
-                className="px-4 py-1.5 bg-white text-black text-[10px] font-black uppercase tracking-widest rounded-sm hover:bg-neon-blue transition-all"
+                className="text-[10px] font-black uppercase tracking-widest text-neon-blue hover:text-white transition-colors bg-neon-blue/10 px-4 py-2 rounded-full border border-neon-blue/20"
               >
-                Login
+                Login with Google
               </button>
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="text-[10px] font-black uppercase tracking-widest text-emerald-500">
+                  {user.displayName || 'User'}
+                </div>
+                <button 
+                  onClick={handleLogout}
+                  className="text-[10px] font-black uppercase tracking-widest text-neutral-500 hover:text-red-400 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
             )}
             <button className="text-neutral-500 hover:text-white transition-all hover:scale-110">
               <Bell size={18} />
@@ -606,7 +611,7 @@ export default function App() {
             <img 
               alt="User profile" 
               className="h-full w-full object-cover opacity-70 hover:opacity-100 transition-opacity" 
-              src={user?.photoURL || `https://picsum.photos/seed/user/100/100`}
+              src={user?.photoURL || 'https://picsum.photos/seed/user/100/100'}
               referrerPolicy="no-referrer"
             />
           </div>
@@ -722,52 +727,8 @@ export default function App() {
 
         {/* Content Area */}
         <div className="flex-1 flex flex-col min-w-0 relative">
-          {!user && isAuthReady ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="max-w-md w-full space-y-12"
-              >
-                {/* Icon Container */}
-                <div className="relative size-24 mx-auto flex items-center justify-center">
-                  <div className="absolute inset-0 bg-neon-blue/10 rounded-full blur-2xl animate-pulse" />
-                  <div className="relative size-20 bg-white/[0.03] border border-white/10 rounded-full flex items-center justify-center text-white">
-                    <ShieldCheck size={32} strokeWidth={1} />
-                  </div>
-                </div>
-                
-                <BotLine />
 
-                {/* Text Content */}
-                <div className="space-y-4">
-                  <h3 className="text-3xl font-extralight text-white tracking-tighter">Acceso Restringido</h3>
-                  <p className="text-neutral-500 text-xs uppercase tracking-[0.2em] leading-relaxed">
-                    Inicia sesión para activar el núcleo de agentes y la persistencia de datos.
-                  </p>
-                </div>
-
-                {/* Auth Buttons */}
-                <div className="flex flex-col gap-3">
-                  <button 
-                    onClick={handleLogin}
-                    className="w-full px-8 py-4 bg-white text-black text-[10px] font-black uppercase tracking-[0.4em] rounded-full hover:bg-neon-blue transition-all shadow-2xl flex items-center justify-center gap-3"
-                  >
-                    <User size={14} />
-                    Iniciar Sesión con Google
-                  </button>
-                  <button 
-                    onClick={handleGithubLogin}
-                    className="w-full px-8 py-4 bg-[#24292e] text-white text-[10px] font-black uppercase tracking-[0.4em] rounded-full hover:bg-neutral-700 transition-all shadow-2xl flex items-center justify-center gap-3"
-                  >
-                    <Github size={14} />
-                    Iniciar Sesión con GitHub
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          ) : (
-            <main className="flex-1 p-10 lg:p-16 overflow-y-auto custom-scrollbar">
+          <main className="flex-1 p-10 lg:p-16 overflow-y-auto custom-scrollbar">
               {activeTab === 'dashboard' ? (
                 projects.length === 0 ? (
                   <MinimalLanding onStartProject={() => setActiveTab('comms')} />
@@ -822,7 +783,6 @@ export default function App() {
               />
             )}
           </main>
-          )}
 
           {/* Movable Terminal */}
           <AnimatePresence>

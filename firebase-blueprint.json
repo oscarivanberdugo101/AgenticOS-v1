@@ -2,62 +2,38 @@
   "entities": {
     "Project": {
       "title": "Project",
-      "description": "A software project managed by the agents",
+      "description": "Represents a software development project.",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "title": { "type": "string" },
-        "description": { "type": "string" },
-        "status": { "type": "string", "enum": ["Active", "Processing", "Idle", "Completed"] },
-        "icon": { "type": "string" },
-        "technologies": { "type": "array", "items": { "type": "string" } },
-        "progress": { "type": "number" },
-        "health": { "type": "string", "enum": ["Healthy", "Warning", "Critical"] },
-        "lastUpdated": { "type": "string", "format": "date-time" },
-        "activeAgents": { "type": "array", "items": { "type": "string" } },
-        "ownerId": { "type": "string" },
-        "stage": { "type": "string", "enum": ["discovery", "kickoff", "development"] },
-        "brief": { "type": "string" }
+        "id": { "type": "string", "description": "Unique identifier for the project." },
+        "title": { "type": "string", "description": "Title of the project." },
+        "description": { "type": "string", "description": "Description of the project." },
+        "status": { "type": "string", "enum": ["Active", "Processing", "Idle", "Completed"], "description": "Current status of the project." },
+        "icon": { "type": "string", "description": "Icon identifier for the project." },
+        "technologies": { "type": "array", "items": { "type": "string" }, "description": "List of technologies used." },
+        "progress": { "type": "number", "description": "Progress percentage." },
+        "health": { "type": "string", "enum": ["Healthy", "Warning", "Critical"], "description": "Health status of the project." },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "Last update timestamp." },
+        "activeAgents": { "type": "array", "items": { "type": "string" }, "description": "List of active agents." },
+        "ownerId": { "type": "string", "description": "ID of the project owner." },
+        "stage": { "type": "string", "description": "Current stage of the project." },
+        "brief": { "type": "string", "description": "Discovery brief of the project." }
       },
-      "required": ["id", "title", "ownerId"]
-    },
-    "ChatMessage": {
-      "title": "ChatMessage",
-      "description": "A message in a project chat",
-      "type": "object",
-      "properties": {
-        "projectId": { "type": "string" },
-        "role": { "type": "string", "enum": ["user", "assistant"] },
-        "content": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      },
-      "required": ["projectId", "role", "content", "timestamp"]
-    },
-    "Artifact": {
-      "title": "Artifact",
-      "description": "A generated file for a project",
-      "type": "object",
-      "properties": {
-        "projectId": { "type": "string" },
-        "path": { "type": "string" },
-        "content": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      },
-      "required": ["projectId", "path", "content", "timestamp"]
+      "required": ["id", "title", "description", "status", "lastUpdated", "ownerId"]
     }
   },
   "firestore": {
     "/projects/{projectId}": {
-      "schema": "Project",
-      "description": "Main project documents"
+      "schema": { "$ref": "Project" },
+      "description": "Collection of projects."
     },
     "/projects/{projectId}/chats/{chatId}": {
-      "schema": "ChatMessage",
-      "description": "Chat history for a project"
+      "schema": { "$ref": "Chat" },
+      "description": "Chat messages for a project."
     },
     "/projects/{projectId}/artifacts/{artifactId}": {
-      "schema": "Artifact",
-      "description": "Generated files for a project"
+      "schema": { "$ref": "Artifact" },
+      "description": "Artifacts generated for a project."
     }
   }
 }

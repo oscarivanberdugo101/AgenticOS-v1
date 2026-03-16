@@ -33,7 +33,7 @@ interface CommsDirectorProps {
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   userInput: string;
   setUserInput: (input: string) => void;
-  handleSendMessage: () => void;
+  handleSendMessage: (msg?: string | React.MouseEvent) => void;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
   discoveryBrief: string | null;
   startKickoff: () => void;
@@ -43,7 +43,7 @@ interface CommsDirectorProps {
   projects?: Project[];
   activeProjectId?: string | null;
   onSelectProject?: (id: string) => void;
-  onStartProject?: (config: any) => void;
+  onStartProject?: (config: any) => Promise<string>;
 }
 
 export const CommsDirector = ({ 
@@ -55,6 +55,7 @@ export const CommsDirector = ({
 }: CommsDirectorProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showConfigForm, setShowConfigForm] = useState(chatMessages.length === 0);
+  const [isStarting, setIsStarting] = useState(false);
   const [config, setConfig] = useState({
     name: '',
     description: '',
@@ -65,7 +66,7 @@ export const CommsDirector = ({
     features: [] as string[]
   });
 
-  const handleStartDiscovery = () => {
+  const handleStartDiscovery = async () => {
     if (!config.name || !config.description) return;
     
     const initialMessage = `Hola, quiero iniciar un nuevo proyecto llamado "${config.name}". 
@@ -79,12 +80,23 @@ Stack Tecnológico Seleccionado:
 - Estilizado: ${config.styling}
 ${config.features.length > 0 ? `- Características adicionales: ${config.features.join(', ')}` : ''}`;
 
-    if (onStartProject) {
-      onStartProject(config);
+    setIsStarting(true);
+    try {
+      if (onStartProject) {
+        await onStartProject(config);
+      }
+      
+      setShowConfigForm(false);
+      
+      // Wait a tiny bit for the state to settle, then send the message
+      setTimeout(() => {
+        handleSendMessage(initialMessage);
+      }, 100);
+    } catch (err) {
+      console.error("Failed to start project:", err);
+    } finally {
+      setIsStarting(false);
     }
-    
-    setUserInput(initialMessage);
-    setShowConfigForm(false);
   };
 
   const toggleFeature = (feature: string) => {
@@ -161,7 +173,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         value={config.name}
                         onChange={(e) => setConfig({...config, name: e.target.value})}
                         placeholder="Ej: E-commerce Global"
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-0 transition-all"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-0"
                       />
                     </div>
 
@@ -171,7 +183,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         value={config.description}
                         onChange={(e) => setConfig({...config, description: e.target.value})}
                         placeholder="¿Qué quieres construir? Describe la funcionalidad principal..."
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-0 transition-all min-h-[120px] resize-none"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white text-sm focus:border-neon-blue/50 focus:ring-0 min-h-[120px] resize-none"
                       />
                     </div>
 
@@ -181,7 +193,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.frontend}
                           onChange={(e) => setConfig({...config, frontend: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 transition-all appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
                         >
                           <option value="Next.js">Next.js</option>
                           <option value="React (Vite)">React (Vite)</option>
@@ -197,7 +209,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.backend}
                           onChange={(e) => setConfig({...config, backend: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 transition-all appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
                         >
                           <option value="Node.js (Express)">Node.js (Express)</option>
                           <option value="Python (FastAPI)">Python (FastAPI)</option>
@@ -212,7 +224,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.database}
                           onChange={(e) => setConfig({...config, database: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 transition-all appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
                         >
                           <option value="PostgreSQL">PostgreSQL</option>
                           <option value="MongoDB">MongoDB</option>
@@ -228,7 +240,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                         <select 
                           value={config.styling}
                           onChange={(e) => setConfig({...config, styling: e.target.value})}
-                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 transition-all appearance-none"
+                          className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white text-xs focus:border-neon-blue/50 focus:ring-0 appearance-none"
                         >
                           <option value="Tailwind CSS">Tailwind CSS</option>
                           <option value="Shadcn UI">Shadcn UI</option>
@@ -260,11 +272,20 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
 
                   <button 
                     onClick={handleStartDiscovery}
-                    disabled={!config.name || !config.description}
+                    disabled={!config.name || !config.description || isStarting}
                     className="w-full py-5 bg-neon-blue text-black text-[10px] font-black uppercase tracking-[0.4em] rounded-2xl hover:bg-white transition-all shadow-[0_0_30px_rgba(0,242,255,0.2)] disabled:opacity-30 flex items-center justify-center gap-3"
                   >
-                    Iniciar Consultoría
-                    <ChevronRight size={16} />
+                    {isStarting ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        Iniciando...
+                      </>
+                    ) : (
+                      <>
+                        Iniciar Consultoría
+                        <ChevronRight size={16} />
+                      </>
+                    )}
                   </button>
                 </div>
               </motion.div>
@@ -325,7 +346,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                   <div ref={chatEndRef} />
                 </div>
 
-                <div className="relative group bg-neutral-900/50 p-4 rounded-2xl border border-white/5 shadow-2xl">
+                <div className="relative bg-neutral-900/50 p-4 rounded-2xl border border-white/5 shadow-2xl">
                   <div className="mb-2 px-4 flex justify-between items-center">
                     <p className="text-[8px] font-black text-neutral-600 uppercase tracking-widest">Canal de Comunicación Directa</p>
                     <p className="text-[8px] font-black text-neon-blue/60 uppercase tracking-widest animate-pulse">Presiona Enter para enviar</p>

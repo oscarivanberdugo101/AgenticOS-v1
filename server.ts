@@ -127,6 +127,7 @@ async function startServer() {
       if (modelType === "local" || modelType === "mixed") {
         triedLocal = true;
         try {
+          console.log("Intentando conectar a Ollama en http://localhost:11434/api/generate");
           const response = await fetch("http://localhost:11434/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -138,13 +139,19 @@ async function startServer() {
             })
           });
 
-          if (!response.ok) throw new Error("Ollama not reachable");
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Ollama error response:", response.status, errorText);
+            throw new Error(`Ollama not reachable: ${response.statusText}`);
+          }
           const data = await response.json();
+          console.log("Respuesta de Ollama recibida.");
           text = data.response;
         } catch (err) {
+          console.error("Error detallado al conectar con Ollama:", err);
           localFailed = true;
           if (modelType === "local") {
-            res.status(503).json({ error: "Ollama no disponible localmente." });
+            res.status(503).json({ error: "Ollama no disponible localmente. Asegúrate de que esté corriendo." });
             return;
           }
           console.warn("Local failed, falling back to cloud...");
