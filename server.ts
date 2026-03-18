@@ -212,7 +212,7 @@ async function startServer() {
         if (!process.env.GEMINI_API_KEY) {
           return res.status(401).json({ error: "GEMINI_API_KEY no configurada. Por favor, añade tu API key en los secretos de AI Studio." });
         }
-        const modelName = agentConfig.model || "gemini-1.5-flash";
+        const modelName = agentConfig.model || "gemini-3-flash-preview";
         const result = await genAI.models.generateContent({ 
           model: modelName,
           contents: prompt,
@@ -308,7 +308,7 @@ async function startServer() {
     
     const clientId = (customClientId as string) || process.env.GITHUB_CLIENT_ID;
     const clientSecret = (customClientSecret as string) || process.env.GITHUB_CLIENT_SECRET;
-    const redirectUri = process.env.GITHUB_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/auth/github/callback`;
+    const redirectUri = process.env.GITHUB_REDIRECT_URI || process.env.APP_URL ? `${process.env.APP_URL}/api/auth/github/callback` : `${req.protocol}://${req.get('host')}/api/auth/github/callback`;
     
     if (!clientId) {
       return res.status(500).json({ error: "GITHUB_CLIENT_ID not configured" });
@@ -327,6 +327,8 @@ async function startServer() {
     let clientId = process.env.GITHUB_CLIENT_ID;
     let clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
+    const redirectUri = process.env.GITHUB_REDIRECT_URI || (process.env.APP_URL ? `${process.env.APP_URL}/api/auth/github/callback` : `${req.protocol}://${req.get('host')}/api/auth/github/callback`);
+    
     if (state) {
       try {
         const decodedState = JSON.parse(Buffer.from(state as string, 'base64').toString('utf8'));
@@ -346,12 +348,14 @@ async function startServer() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json"
+          "Accept": "application/json",
+          "User-Agent": "MultiAgent-Lab-App"
         },
         body: JSON.stringify({
           client_id: clientId,
           client_secret: clientSecret,
-          code
+          code,
+          redirect_uri: redirectUri
         })
       });
 
@@ -395,7 +399,8 @@ async function startServer() {
         headers: {
           "Authorization": `token ${token}`,
           "Accept": "application/vnd.github.v3+json",
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "User-Agent": "MultiAgent-Lab-App"
         },
         body: JSON.stringify({
           name: repoName,
@@ -420,7 +425,8 @@ async function startServer() {
           headers: {
             "Authorization": `token ${token}`,
             "Accept": "application/vnd.github.v3+json",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "MultiAgent-Lab-App"
           },
           body: JSON.stringify({
             message: `Add ${path}`,
