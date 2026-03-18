@@ -35,6 +35,21 @@
 //   - content: string (required) - File content
 //   - timestamp: timestamp (required) - Time created
 //
+// Collection: users
+// Document ID: {userId}
+// Fields:
+//   - uid: string (required) - User ID
+//   - email: string (required) - User email
+//   - displayName: string (optional) - User display name
+//   - role: string (optional) - 'admin' or 'user'
+//
+// Collection: users/{userId}/settings
+// Document ID: integrations
+// Fields:
+//   - githubClientId: string (optional) - GitHub Client ID
+//   - githubClientSecret: string (optional) - GitHub Client Secret
+//   - githubRedirectUri: string (optional) - GitHub Redirect URI
+//
 // ===============================================================
 
 rules_version = '2';
@@ -96,6 +111,15 @@ service cloud.firestore {
       match /artifacts/{artifactId} {
         allow read: if isAuthenticated() && (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid || isAdmin());
         allow create: if isAuthenticated() && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid;
+      }
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) || isAdmin();
+
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId) || isAdmin();
       }
     }
   }

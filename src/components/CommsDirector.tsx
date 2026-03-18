@@ -37,6 +37,7 @@ interface CommsDirectorProps {
   startKickoff: () => void;
   kickoffMessages: any[];
   isPipelineRunning: boolean;
+  agentThinking: boolean;
   runDevelopmentPipeline: () => void;
   projects?: Project[];
   activeProjectId?: string | null;
@@ -46,6 +47,7 @@ interface CommsDirectorProps {
 
 export const CommsDirector = ({ 
   stage, chatMessages, streamingText, activeAgentId, 
+  agentThinking,
   attachments, setAttachments, handleFileUpload, 
   handleSendMessage, chatEndRef,
   discoveryBrief, startKickoff, kickoffMessages, isPipelineRunning, runDevelopmentPipeline,
@@ -53,8 +55,9 @@ export const CommsDirector = ({
 }: CommsDirectorProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localInput, setLocalInput] = useState("");
-  const [showConfigForm, setShowConfigForm] = useState(chatMessages.length === 0);
+  const [showConfigForm, setShowConfigForm] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(chatMessages.length === 0);
   const [config, setConfig] = useState({
     name: '',
     description: '',
@@ -142,27 +145,81 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
         </div>
       )}
 
-      {stage === 'discovery' && (
-        <div className="flex flex-col h-[700px]">
-          <AnimatePresence mode="wait">
-            {showConfigForm ? (
-              <motion.div 
-                key="config-form"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="flex-1 flex flex-col items-center justify-center"
-              >
-                <div className="w-full max-w-xl bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-12 space-y-8 backdrop-blur-xl shadow-2xl">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="size-12 bg-neon-blue/20 border border-neon-blue/40 rounded-2xl flex items-center justify-center">
-                      <Settings className="text-neon-blue" size={24} />
+      <AnimatePresence mode="wait">
+        {isSyncing ? (
+          <motion.div
+            key="sync-scene"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex-1 flex flex-col items-center justify-center space-y-8 py-20"
+          >
+            <div className="relative">
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  rotate: [0, 180, 360],
+                  opacity: [0.3, 0.6, 0.3]
+                }}
+                transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                className="absolute inset-0 bg-neon-blue/20 blur-[60px] rounded-full"
+              />
+              <div className="relative size-32 bg-black border border-neon-blue/40 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(0,242,255,0.2)]">
+                <Bot size={48} className="text-neon-blue animate-pulse" />
+                <motion.div 
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                  className="absolute inset-0 border-t-2 border-neon-blue rounded-full"
+                />
+              </div>
+            </div>
+
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl font-extralight text-white tracking-widest uppercase">Sincronización de Enlace</h2>
+              <p className="text-[10px] font-black text-neon-blue/60 uppercase tracking-[0.5em] animate-pulse">Estableciendo conexión con el Director...</p>
+            </div>
+
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1 }}
+              onClick={() => setIsSyncing(false)}
+              className="px-8 py-3 bg-white/5 border border-white/10 rounded-full text-[10px] font-black text-white uppercase tracking-widest hover:bg-neon-blue hover:text-black transition-all"
+            >
+              Entrar al Laboratorio
+            </motion.button>
+          </motion.div>
+        ) : stage === 'discovery' && (
+          <div className="flex flex-col h-[700px]">
+            <AnimatePresence mode="wait">
+              {showConfigForm ? (
+                <motion.div 
+                  key="config-form"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex-1 flex flex-col items-center justify-center"
+                >
+                  <div className="w-full max-w-xl bg-white/[0.02] border border-white/10 rounded-[2.5rem] p-12 space-y-8 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon-blue to-transparent opacity-50" />
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="size-12 bg-neon-blue/20 border border-neon-blue/40 rounded-2xl flex items-center justify-center">
+                          <Settings className="text-neon-blue" size={24} />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-extralight text-white tracking-tight">Matriz de Configuración</h2>
+                          <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Parámetros base del sistema</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setShowConfigForm(false)}
+                        className="p-2 hover:bg-white/10 rounded-full text-neutral-500 transition-colors"
+                      >
+                        <X size={20} />
+                      </button>
                     </div>
-                    <div>
-                      <h2 className="text-2xl font-extralight text-white tracking-tight">Configuración Inicial</h2>
-                      <p className="text-[8px] font-black text-neutral-500 uppercase tracking-[0.3em]">Define los parámetros base del proyecto</p>
-                    </div>
-                  </div>
 
                   <div className="space-y-6">
                     <div className="space-y-2">
@@ -302,16 +359,41 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                       animate={{ opacity: 1, y: 0 }}
                       className="flex gap-4 items-start"
                     >
-                      <div className="w-10 h-10 rounded-full bg-neon-blue/20 border border-neon-blue/40 flex items-center justify-center flex-shrink-0 shadow-[0_0_15px_rgba(0,242,255,0.2)]">
-                        <User size={20} className="text-neon-blue" />
-                      </div>
-                      <div className="bg-white/[0.03] border border-white/5 rounded-2xl rounded-tl-none p-5 text-sm text-neutral-300 leading-relaxed shadow-2xl backdrop-blur-sm">
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neon-blue mb-3">Director de Proyectos · Consultoría</p>
-                        Bienvenido al Laboratorio. Soy el <strong>Director de Proyectos</strong>. 
-                        Mi misión es realizar una consultoría profunda para definir los cimientos de tu software.
-                        <br/><br/>
-                        ¿Qué visión tienes hoy? Cuéntame los detalles o adjunta tus documentos de referencia.
-                      </div>
+                        <div className="w-10 h-10 rounded-full bg-neon-blue/20 border border-neon-blue/40 flex items-center justify-center flex-shrink-0 shadow-[0_0_15px_rgba(0,242,255,0.2)]">
+                          <Bot size={20} className="text-neon-blue" />
+                        </div>
+                        <div className="bg-white/[0.03] border border-white/5 rounded-2xl rounded-tl-none p-5 text-sm text-neutral-300 leading-relaxed shadow-2xl backdrop-blur-sm relative group">
+                          <div className="absolute -left-2 top-4 size-4 bg-white/[0.03] border-l border-t border-white/5 rotate-[-45deg]" />
+                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neon-blue mb-3">Director de Proyectos · Consultoría</p>
+                          <p className="mb-4">
+                            Bienvenido al Laboratorio de Agentes. Soy el <strong>Director de Proyectos</strong>. 
+                            Mi red neuronal está lista para procesar tu visión y coordinar a los especialistas.
+                          </p>
+                          
+                          <div className="grid grid-cols-1 gap-3 mt-6">
+                            <button 
+                              onClick={() => setShowConfigForm(true)}
+                              className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-neon-blue/10 hover:border-neon-blue/30 transition-all group/btn"
+                            >
+                              <div className="text-left">
+                                <p className="text-[10px] font-bold text-white">Configuración Rápida</p>
+                                <p className="text-[8px] text-neutral-500">Define el stack manualmente</p>
+                              </div>
+                              <ChevronRight size={16} className="text-neutral-600 group-hover/btn:text-neon-blue transition-colors" />
+                            </button>
+                            
+                            <button 
+                              onClick={() => handleSendMessage("Hola Director, quiero iniciar un nuevo proyecto.")}
+                              className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-neon-blue/10 hover:border-neon-blue/30 transition-all group/btn"
+                            >
+                              <div className="text-left">
+                                <p className="text-[10px] font-bold text-white">Iniciar Diálogo</p>
+                                <p className="text-[8px] text-neutral-500">Cuéntame tu idea en lenguaje natural</p>
+                              </div>
+                              <Sparkles size={16} className="text-neutral-600 group-hover/btn:text-neon-blue transition-colors" />
+                            </button>
+                          </div>
+                        </div>
                     </motion.div>
                   )}
                   {chatMessages.map((msg: any, i: number) => (
@@ -330,15 +412,27 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                       </div>
                     </motion.div>
                   ))}
-                  {activeAgentId === 'director' && streamingText && (
+                  {activeAgentId === 'director' && (streamingText || agentThinking) && (
                     <div className="flex gap-4 items-start">
                       <div className="w-10 h-10 rounded-full bg-neon-blue/20 border border-neon-blue/40 flex items-center justify-center flex-shrink-0">
                         <User size={20} className="text-neon-blue" />
                       </div>
                       <div className="bg-white/[0.03] border border-white/5 rounded-2xl rounded-tl-none p-5 text-sm text-neutral-300 leading-relaxed shadow-2xl">
-                        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-neon-blue mb-2">Director escribiendo...</p>
-                        {streamingText}
-                        <span className="inline-block w-1.5 h-4 bg-neon-blue ml-1 animate-pulse align-middle" />
+                        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-neon-blue mb-2">
+                          {agentThinking ? 'Director analizando...' : 'Director escribiendo...'}
+                        </p>
+                        {agentThinking ? (
+                          <div className="flex gap-1 items-center py-2">
+                            <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="size-1 bg-neon-blue rounded-full" />
+                            <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="size-1 bg-neon-blue rounded-full" />
+                            <motion.div animate={{ scale: [1, 1.5, 1] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="size-1 bg-neon-blue rounded-full" />
+                          </div>
+                        ) : (
+                          <>
+                            {streamingText}
+                            <span className="inline-block w-1.5 h-4 bg-neon-blue ml-1 animate-pulse align-middle" />
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
@@ -416,6 +510,7 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
           </AnimatePresence>
         </div>
       )}
+    </AnimatePresence>
 
       {stage === 'kickoff' && (
         <div className="space-y-12">
@@ -514,12 +609,20 @@ ${config.features.length > 0 ? `- Características adicionales: ${config.feature
                           <p className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-white' : 'text-neutral-600'}`}>
                             {agent.name}
                           </p>
-                          <span className="text-[9px] font-mono text-neutral-500">{isActive ? 'PROCESANDO...' : 'EN ESPERA'}</span>
+                          <span className="text-[9px] font-mono text-neutral-500">
+                            {isActive ? (agentThinking ? 'PENSANDO...' : 'ESCRIBIENDO...') : 'EN ESPERA'}
+                          </span>
                         </div>
                         <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                           <motion.div 
                             initial={{ width: 0 }}
-                            animate={{ width: isActive ? '60%' : '0%' }}
+                            animate={{ 
+                              width: isActive ? (agentThinking ? '30%' : '60%') : '0%',
+                              opacity: isActive && agentThinking ? [0.4, 1, 0.4] : 1
+                            }}
+                            transition={{
+                              opacity: { repeat: Infinity, duration: 1.5 }
+                            }}
                             className={`h-full bg-neon-blue`}
                           />
                         </div>

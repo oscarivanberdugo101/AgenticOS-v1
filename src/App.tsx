@@ -28,6 +28,7 @@ import {
   Database, 
   Cloud, 
   X,
+  BrainCircuit,
   GripHorizontal,
   Bot,
   Folder,
@@ -44,12 +45,10 @@ import {
   ChevronRight,
   Github,
   MessageCircle,
-  Share2,
-  FolderOpen,
-  MessageSquare
+  Share2
 } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
-import { Project, LogEntry, Activity } from './types';
+import { Project, LogEntry, Activity, ProjectVersion } from './types';
 import { AgentOrchestrator, AGENTS } from './services/agentService';
 import { DashboardSection } from './components/DashboardSection';
 import { ProjectCard } from './components/ProjectCard';
@@ -59,6 +58,10 @@ import { TeamSwarmSection } from './components/TeamSwarmSection';
 import { CommsDirector } from './components/CommsDirector';
 import { TutorialSection } from './components/TutorialSection';
 import { CodeViewer } from './components/CodeViewer';
+import { Sandbox } from './components/Sandbox';
+import { VersionControl } from './components/VersionControl';
+import { ExportManager } from './components/ExportManager';
+import { SettingsSection } from './components/SettingsSection';
 import { SidebarItem, SidebarGroup, SidebarSubItem, SidebarFolder } from './components/Sidebar';
 import { SerafinaFloatingAgent } from './components/SerafinaFloatingAgent';
 import { BotLine } from './components/BotLine';
@@ -71,9 +74,10 @@ import {
   query, 
   orderBy, 
   getDoc,
-  serverTimestamp,
   getDocs,
-  where
+  limit,
+  where,
+  serverTimestamp
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
@@ -125,17 +129,24 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([]);
   const [attachments, setAttachments] = useState<{name: string, content: string, type: string}[]>([]);
   const [isDiscoveryComplete, setIsDiscoveryComplete] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'comms' | 'team' | 'tutorial'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'comms' | 'team' | 'tutorial' | 'settings'>('dashboard');
   const [viewingProjectDetails, setViewingProjectDetails] = useState(false);
   const [stage, setStage] = useState<'discovery' | 'kickoff' | 'development'>('discovery');
   const [kickoffMessages, setKickoffMessages] = useState<{agent: string, content: string, color: string}[]>([]);
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [projectDetailTab, setProjectDetailTab] = useState<'artifacts' | 'sandbox' | 'versions' | 'export'>('artifacts');
   const [streamingText, setStreamingText] = useState("");
-  const [modelSource, setModelSource] = useState<'cloud' | 'local'>('cloud');
-  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('cloud'));
+  const [agentThinking, setAgentThinking] = useState(false);
+  const [modelSource, setModelSource] = useState<'cloud' | 'local'>('local');
+  const [ollamaStatus, setOllamaStatus] = useState<{online: boolean, models: any[], error?: string}>({online: false, models: []});
+  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('local'));
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const dragControls = useDragControls();
+
+  useEffect(() => {
+    setOrchestrator(new AgentOrchestrator(modelSource));
+  }, [modelSource]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -149,6 +160,23 @@ export default function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, streamingText]);
+
+  const [isModelSettingsOpen, setIsModelSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    const checkOllama = async () => {
+      try {
+        const response = await fetch('/api/ollama/status');
+        const data = await response.json();
+        setOllamaStatus(data);
+      } catch (err) {
+        setOllamaStatus({ online: false, models: [], error: "No se pudo conectar con el servidor backend" });
+      }
+    };
+    checkOllama();
+    const interval = setInterval(checkOllama, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     setOrchestrator(new AgentOrchestrator(modelSource));
@@ -243,29 +271,13 @@ export default function App() {
 
   // Load project-specific data when activeProjectId changes
   useEffect(() => {
-    if (!activeProjectId) return;
+    if (!activeProjectId) {
+      orchestrator.reset();
+      return;
+    }
 
-    // Load chats
-    const chatUnsubscribe = onSnapshot(
-      query(collection(db, `projects/${activeProjectId}/chats`), orderBy('timestamp', 'asc')),
-      (snapshot) => {
-        const messages = snapshot.docs.map(doc => doc.data() as {role: 'user' | 'assistant', content: string});
-        setProjectChats(prev => ({ ...prev, [activeProjectId]: messages }));
-      }
-    );
-
-    // Load artifacts
-    const artifactUnsubscribe = onSnapshot(
-      collection(db, `projects/${activeProjectId}/artifacts`),
-      (snapshot) => {
-        const artifactsMap: Record<string, string> = {};
-        snapshot.docs.forEach(doc => {
-          const data = doc.data();
-          artifactsMap[data.path] = data.content;
-        });
-        setProjectArtifacts(prev => ({ ...prev, [activeProjectId]: artifactsMap }));
-      }
-    );
+    // Reset and reload context for the new active project
+    orchestrator.reset();
 
     // Load project metadata (stage, brief)
     const projectRef = doc(db, 'projects', activeProjectId);
@@ -274,8 +286,54 @@ export default function App() {
         const data = snap.data();
         setProjectStages(prev => ({ ...prev, [activeProjectId]: data.stage || 'discovery' }));
         setProjectBriefs(prev => ({ ...prev, [activeProjectId]: data.brief || null }));
+        
+        if (data.brief) {
+          orchestrator.addContext({
+            source: 'System',
+            content: data.brief,
+            type: 'brief'
+          });
+        }
       }
     });
+
+    // Load chats into orchestrator context
+    const chatUnsubscribe = onSnapshot(
+      query(collection(db, `projects/${activeProjectId}/chats`), orderBy('timestamp', 'asc')),
+      (snapshot) => {
+        const messages = snapshot.docs.map(doc => doc.data() as {role: 'user' | 'assistant', content: string});
+        setProjectChats(prev => ({ ...prev, [activeProjectId]: messages }));
+        
+        // Add recent messages to context (limit to last 10 for performance)
+        messages.slice(-10).forEach(msg => {
+          orchestrator.addContext({
+            source: msg.role === 'user' ? 'Usuario' : 'Director',
+            content: msg.content,
+            type: 'chat'
+          });
+        });
+      }
+    );
+
+    // Load artifacts into orchestrator context
+    const artifactUnsubscribe = onSnapshot(
+      collection(db, `projects/${activeProjectId}/artifacts`),
+      (snapshot) => {
+        const artifactsMap: Record<string, string> = {};
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          artifactsMap[data.path] = data.content;
+          
+          // Add artifacts to context
+          orchestrator.addContext({
+            source: 'System',
+            content: `Archivo: ${data.path}\nContenido:\n${data.content}`,
+            type: 'code'
+          });
+        });
+        setProjectArtifacts(prev => ({ ...prev, [activeProjectId]: artifactsMap }));
+      }
+    );
 
     return () => {
       chatUnsubscribe();
@@ -306,13 +364,20 @@ export default function App() {
     }
 
     setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    orchestrator.addContext({
+      source: 'Usuario',
+      content: userMsg,
+      type: 'chat'
+    });
     setAttachments([]);
     setIsPipelineRunning(true);
+    setAgentThinking(true);
     setActiveAgentId('director');
     setStreamingText("");
 
     try {
       const result = await orchestrator.runAgent('director', fullMsg, (token) => {
+        setAgentThinking(false);
         setStreamingText(prev => prev + token);
       });
 
@@ -320,17 +385,27 @@ export default function App() {
       if (activeProjectId) {
         addDoc(collection(db, `projects/${activeProjectId}/chats`), {
           role: 'assistant',
-          content: result.text,
+          content: result.output,
           timestamp: serverTimestamp(),
           projectId: activeProjectId
         });
       }
 
-      setChatMessages(prev => [...prev, { role: 'assistant', content: result.text }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: result.output }]);
+      orchestrator.addContext({
+        source: 'Director',
+        content: result.output,
+        type: 'chat'
+      });
       
-      if (result.text.includes("DISCOVERY_COMPLETO") || chatMessages.length > 6) {
-        const brief = result.text.split("DISCOVERY_COMPLETO")[1]?.trim() || result.text;
+      if (result.output.includes("DISCOVERY_COMPLETO") || chatMessages.length > 6) {
+        const brief = result.output.split("DISCOVERY_COMPLETO")[1]?.trim() || result.output;
         setDiscoveryBrief(brief);
+        orchestrator.addContext({
+          source: 'System',
+          content: brief,
+          type: 'brief'
+        });
         setIsDiscoveryComplete(true);
         setStage('kickoff');
 
@@ -365,24 +440,26 @@ export default function App() {
     
     for (const agent of kickoffAgents) {
       setActiveAgentId(agent.id);
+      setAgentThinking(true);
       const prompt = `Como ${agent.role}, analiza este brief y di cómo vas a contribuir al proyecto: ${brief}`;
       
       try {
         const result = await orchestrator.runAgent(agent.id, prompt, (token) => {
+          setAgentThinking(false);
           setStreamingText(prev => prev + token);
         });
-        setKickoffMessages(prev => [...prev, { agent: agent.name, content: result.text, color: agent.color }]);
+        setKickoffMessages(prev => [...prev, { agent: agent.name, content: result.output, color: agent.color }]);
         
         if (activeProjectId) {
           setProjectKickoffMessages(prev => ({
             ...prev,
-            [activeProjectId]: [...(prev[activeProjectId] || []), { agent: agent.name, content: result.text, color: agent.color }]
+            [activeProjectId]: [...(prev[activeProjectId] || []), { agent: agent.name, content: result.output, color: agent.color }]
           }));
           
           // Save kickoff message to Firebase
           addDoc(collection(db, `projects/${activeProjectId}/chats`), {
             role: 'assistant',
-            content: `[KICKOFF - ${agent.name}]: ${result.text}`,
+            content: `[KICKOFF - ${agent.name}]: ${result.output}`,
             timestamp: serverTimestamp(),
             projectId: activeProjectId
           });
@@ -395,6 +472,39 @@ export default function App() {
     
     setIsPipelineRunning(false);
     setActiveAgentId(null);
+  };
+
+  const saveProjectVersion = async (projectId: string, currentArtifacts: Record<string, string>, commitMessage: string = "Snapshot automático") => {
+    if (!projectId || Object.keys(currentArtifacts).length === 0) return;
+
+    try {
+      const versionsRef = collection(db, `projects/${projectId}/versions`);
+      const snapshot = await getDocs(query(versionsRef, orderBy('versionNumber', 'desc'), limit(1)));
+      const lastVersion = snapshot.docs[0]?.data() as ProjectVersion | undefined;
+      const nextVersionNumber = (lastVersion?.versionNumber || 0) + 1;
+
+      const versionId = Math.random().toString(36).substr(2, 9);
+      const newVersion: Omit<ProjectVersion, 'id'> = {
+        projectId,
+        versionNumber: nextVersionNumber,
+        timestamp: new Date().toISOString(),
+        artifacts: currentArtifacts,
+        commitMessage
+      };
+
+      await setDoc(doc(db, `projects/${projectId}/versions`, versionId), newVersion);
+      
+      // Add log
+      setLogs(prev => [{
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+        agent: 'SYSTEM',
+        message: `Nueva versión v${nextVersionNumber}.0 guardada exitosamente.`,
+        type: 'arch'
+      }, ...prev]);
+    } catch (err) {
+      console.error("Error saving version:", err);
+    }
   };
 
   const runPipeline = async () => {
@@ -413,22 +523,43 @@ export default function App() {
     setIsPipelineRunning(true);
     setArtifacts({});
     
-    const devAgents = AGENTS.filter(a => a.id !== 'director');
+    const devAgents = AGENTS.filter(a => a.id !== 'director' && a.id !== 'revisor' && a.id !== 'tester');
+    const tester = AGENTS.find(a => a.id === 'tester');
+    const revisor = AGENTS.find(a => a.id === 'revisor');
     
-    for (const agent of devAgents) {
+    // Parallel execution for non-revisor/tester agents
+    const agentPromises = devAgents.map(async (agent) => {
       setActiveAgentId(agent.id);
+      setAgentThinking(true);
       const prompt = `DESARROLLO: Basado en el brief consolidado: ${brief}. Genera los archivos correspondientes a tu rol (${agent.role}).`;
       
       try {
         const result = await orchestrator.runAgent(agent.id, prompt, (token) => {
+          setAgentThinking(false);
           setStreamingText(prev => prev + token);
         });
         
         if (result.files) {
-          setArtifacts(prev => ({ ...prev, ...result.files }));
+          // Format files before saving
+          const formattedFiles: Record<string, string> = {};
+          for (const [path, content] of Object.entries(result.files)) {
+            try {
+              const formatRes = await fetch('/api/format', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content, filepath: path })
+              });
+              const formatData = await formatRes.json();
+              formattedFiles[path] = formatData.formatted || content;
+            } catch (e) {
+              formattedFiles[path] = content;
+            }
+          }
+
+          setArtifacts(prev => ({ ...prev, ...formattedFiles }));
           
           // Save artifacts to Firestore
-          for (const [path, content] of Object.entries(result.files)) {
+          for (const [path, content] of Object.entries(formattedFiles)) {
             const artifactId = path.replace(/\//g, '_');
             setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
               projectId: activeProjectId,
@@ -439,6 +570,44 @@ export default function App() {
           }
         }
         setStreamingText("");
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    await Promise.all(agentPromises);
+
+    // Run tester
+    if (tester) {
+      setActiveAgentId(tester.id);
+      setAgentThinking(true);
+      const prompt = `TESTING: Genera pruebas para los archivos creados: ${Object.keys(artifacts).join(', ')}.`;
+      try {
+        const result = await orchestrator.runAgent(tester.id, prompt, (token) => {
+          setAgentThinking(false);
+          setStreamingText(prev => prev + token);
+        });
+        if (result.files) {
+          setArtifacts(prev => ({ ...prev, ...result.files }));
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Run revisor last
+    if (revisor) {
+      setActiveAgentId(revisor.id);
+      setAgentThinking(true);
+      const prompt = `REVISIÓN: Revisa y optimiza los archivos generados: ${Object.keys(artifacts).join(', ')}.`;
+      try {
+        const result = await orchestrator.runAgent(revisor.id, prompt, (token) => {
+          setAgentThinking(false);
+          setStreamingText(prev => prev + token);
+        });
+        if (result.files) {
+          setArtifacts(prev => ({ ...prev, ...result.files }));
+        }
       } catch (err) {
         console.error(err);
       }
@@ -560,6 +729,53 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleRefactor = async (path: string) => {
+    if (!activeProjectId) return;
+    const content = (activeProjectId ? projectArtifacts[activeProjectId][path] : artifacts[path]) || '';
+    if (!content) return;
+
+    setActiveTab('comms');
+    setActiveAgentId('refactorer');
+    setAgentThinking(true);
+    setStreamingText(`Analizando y refactorizando ${path}...`);
+
+    try {
+      const prompt = `Refactoriza el siguiente archivo para mejorar su legibilidad, eficiencia y adherencia a las mejores prácticas. Mantén la misma funcionalidad.\n\nArchivo: ${path}\nContenido:\n${content}`;
+      const result = await orchestrator.runAgent('refactorer', prompt, (token) => {
+        setStreamingText(prev => prev + token);
+      });
+      
+      if (result.status === 'SUCCESS' && result.files) {
+        // Update artifacts
+        const newFiles = result.files;
+        setArtifacts(prev => ({ ...prev, ...newFiles }));
+        if (activeProjectId) {
+          setProjectArtifacts(prev => ({
+            ...prev,
+            [activeProjectId]: { ...(prev[activeProjectId] || {}), ...newFiles }
+          }));
+          
+          // Save to Firestore
+          for (const [filePath, fileContent] of Object.entries(newFiles)) {
+            const artifactId = filePath.replace(/\//g, '_');
+            await setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
+              projectId: activeProjectId,
+              path: filePath,
+              content: fileContent,
+              timestamp: serverTimestamp()
+            });
+          }
+        }
+        setStreamingText(`Refactorización completada para ${path}.`);
+      }
+    } catch (err) {
+      console.error("Refactor error:", err);
+      setGlobalError("Error al refactorizar el código.");
+    } finally {
+      setAgentThinking(false);
+    }
+  };
+
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden bg-background-dark text-neutral-300 antialiased selection:bg-neon-blue/20 selection:text-white">
       {/* Top Navigation Bar */}
@@ -574,6 +790,29 @@ export default function App() {
             </div>
             <h2 className="text-white text-xs font-black tracking-[0.3em] uppercase">Agentic.OS</h2>
           </div>
+          
+          {/* Ollama Status Indicator */}
+          <div className="flex items-center gap-3 px-4 py-1.5 rounded-full bg-white/5 border border-white/10">
+            <div className={`size-2 rounded-full ${ollamaStatus.online ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-neutral-400">
+              Ollama: {ollamaStatus.online ? 'Online' : 'Offline'}
+            </span>
+            {ollamaStatus.online && ollamaStatus.models.length > 0 && (
+              <div className="h-3 w-[1px] bg-white/10 mx-1"></div>
+            )}
+            {ollamaStatus.online && ollamaStatus.models.length > 0 && (
+              <span className="text-[9px] font-bold text-neutral-500">
+                {ollamaStatus.models.length} Models
+              </span>
+            )}
+            <button 
+              onClick={() => setIsModelSettingsOpen(true)}
+              className="p-1 hover:bg-white/10 rounded-md transition-colors"
+            >
+              <Settings size={12} className="text-neutral-500 hover:text-white" />
+            </button>
+          </div>
+
           <nav className="hidden md:flex items-center gap-10">
             <button 
               onClick={() => setActiveTab('dashboard')}
@@ -602,6 +841,13 @@ export default function App() {
             >
               Team
               {activeTab === 'team' && <span className="absolute -bottom-1 left-0 w-full h-[1px] bg-white"></span>}
+            </button>
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className={`text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${activeTab === 'settings' ? 'text-white relative' : 'text-neutral-500 hover:text-white'}`}
+            >
+              Settings
+              {activeTab === 'settings' && <span className="absolute -bottom-1 left-0 w-full h-[1px] bg-white"></span>}
             </button>
           </nav>
         </div>
@@ -700,6 +946,14 @@ export default function App() {
                   label="Tutorial" 
                   active={activeTab === 'tutorial'}
                   onClick={() => setActiveTab('tutorial')}
+                  expanded={isSidebarExpanded}
+                />
+                
+                <SidebarItem 
+                  icon={Settings} 
+                  label="Configuración" 
+                  active={activeTab === 'settings'}
+                  onClick={() => setActiveTab('settings')}
                   expanded={isSidebarExpanded}
                 />
                 
@@ -848,18 +1102,105 @@ export default function App() {
                         <h3 className="text-xl font-bold text-white mb-2">{projects.find(p => p.id === activeProjectId)?.title}</h3>
                         <p className="text-sm text-neutral-400">{projects.find(p => p.id === activeProjectId)?.description}</p>
                       </div>
-                      <button 
-                        onClick={() => setActiveTab('comms')}
-                        className="px-6 py-3 bg-neon-blue/10 text-neon-blue border border-neon-blue/20 rounded-xl hover:bg-neon-blue hover:text-black transition-all text-xs font-bold uppercase tracking-widest flex items-center gap-2"
-                      >
-                        <MessageSquare size={16} />
-                        Continuar Chat
-                      </button>
+                      <div className="flex items-center gap-4">
+                        <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+                          <button 
+                            onClick={() => setProjectDetailTab('artifacts')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${projectDetailTab === 'artifacts' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                          >
+                            Artefactos
+                          </button>
+                          <button 
+                            onClick={() => setProjectDetailTab('sandbox')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${projectDetailTab === 'sandbox' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                          >
+                            Sandbox
+                          </button>
+                          <button 
+                            onClick={() => setProjectDetailTab('versions')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${projectDetailTab === 'versions' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                          >
+                            Versiones
+                          </button>
+                          <button 
+                            onClick={() => setProjectDetailTab('export')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${projectDetailTab === 'export' ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-neutral-300'}`}
+                          >
+                            Exportar
+                          </button>
+                        </div>
+                        <button 
+                          onClick={() => setActiveTab('comms')}
+                          className="px-6 py-3 bg-neon-blue/10 text-neon-blue border border-neon-blue/20 rounded-xl hover:bg-neon-blue hover:text-black transition-all text-xs font-bold uppercase tracking-widest flex items-center gap-2"
+                        >
+                          <MessageSquare size={16} />
+                          Continuar Chat
+                        </button>
+                      </div>
                     </div>
-                    <CodeViewer 
-                      artifacts={activeProjectId ? (projectArtifacts[activeProjectId] || {}) : artifacts}
-                      onDownload={downloadZip}
-                    />
+
+                    <div className="min-h-[600px]">
+                      {projectDetailTab === 'artifacts' && (
+                        <CodeViewer 
+                          artifacts={activeProjectId ? (projectArtifacts[activeProjectId] || {}) : artifacts}
+                          onDownload={downloadZip}
+                          onRefactor={handleRefactor}
+                        />
+                      )}
+                      {projectDetailTab === 'sandbox' && (
+                        <Sandbox 
+                          artifacts={activeProjectId ? (projectArtifacts[activeProjectId] || {}) : artifacts}
+                        />
+                      )}
+                      {projectDetailTab === 'versions' && activeProjectId && (
+                        <VersionControl 
+                          projectId={activeProjectId}
+                          currentArtifacts={activeProjectId ? (projectArtifacts[activeProjectId] || {}) : artifacts}
+                          onRestore={(restoredArtifacts) => {
+                            setArtifacts(restoredArtifacts);
+                            if (activeProjectId) {
+                              setProjectArtifacts(prev => ({ ...prev, [activeProjectId]: restoredArtifacts }));
+                              // Update Firestore artifacts
+                              Object.entries(restoredArtifacts).forEach(([path, content]) => {
+                                const artifactId = path.replace(/\//g, '_');
+                                setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
+                                  projectId: activeProjectId,
+                                  path,
+                                  content,
+                                  timestamp: serverTimestamp()
+                                });
+                              });
+                            }
+                            setProjectDetailTab('artifacts');
+                          }}
+                          onRestoreFile={(path, content) => {
+                            setArtifacts(prev => ({ ...prev, [path]: content }));
+                            if (activeProjectId) {
+                              setProjectArtifacts(prev => ({
+                                ...prev,
+                                [activeProjectId]: { ...(prev[activeProjectId] || {}), [path]: content }
+                              }));
+                              const artifactId = path.replace(/\//g, '_');
+                              setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
+                                projectId: activeProjectId,
+                                path,
+                                content,
+                                timestamp: serverTimestamp()
+                              });
+                            }
+                            setProjectDetailTab('artifacts');
+                          }}
+                        />
+                      )}
+                      {projectDetailTab === 'export' && activeProjectId && (
+                        <ExportManager 
+                          artifacts={activeProjectId ? (projectArtifacts[activeProjectId] || {}) : artifacts}
+                          projectName={projects.find(p => p.id === activeProjectId)?.title || 'Project'}
+                          onDownloadZip={downloadZip}
+                          onGoToSettings={() => setActiveTab('settings')}
+                        />
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -867,12 +1208,15 @@ export default function App() {
               <TeamSwarmSection projects={projects} />
             ) : activeTab === 'tutorial' ? (
               <TutorialSection onStart={() => setActiveTab('dashboard')} />
+            ) : activeTab === 'settings' ? (
+              user ? <SettingsSection userId={user.uid} /> : <MinimalLanding onStartProject={() => setActiveTab('comms')} />
             ) : (
               <CommsDirector 
                 stage={activeProjectId ? (projectStages[activeProjectId] || 'discovery') : stage}
                 chatMessages={activeProjectId ? (projectChats[activeProjectId] || []) : chatMessages}
                 streamingText={streamingText}
                 activeAgentId={activeAgentId}
+                agentThinking={agentThinking}
                 attachments={attachments}
                 setAttachments={setAttachments}
                 handleFileUpload={handleFileUpload}
@@ -1121,6 +1465,122 @@ export default function App() {
         
         {/* Serafina Floating Agent */}
         <SerafinaFloatingAgent />
+
+        {/* Model Settings Modal */}
+        <AnimatePresence>
+          {isModelSettingsOpen && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl"
+              >
+                <div className="p-6 border-b border-white/10 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-blue-500/10">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/20 rounded-lg">
+                      <Cpu className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-white">Configuración de Modelos Locales</h2>
+                      <p className="text-sm text-gray-400">Gestión de Ollama y Agentes</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsModelSettingsOpen(false)}
+                    className="p-2 hover:bg-white/5 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                  {/* Ollama Status Card */}
+                  <div className={`p-4 rounded-xl border ${ollamaStatus.online ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-400">Estado de Ollama</span>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${ollamaStatus.online ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                        <span className={`text-sm font-bold ${ollamaStatus.online ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {ollamaStatus.online ? 'EN LÍNEA' : 'DESCONECTADO'}
+                        </span>
+                      </div>
+                    </div>
+                    {ollamaStatus.online ? (
+                      <p className="text-xs text-emerald-400/70">
+                        Conectado a http://localhost:11434. {ollamaStatus.models.length} modelos detectados.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-red-400/70">
+                        No se pudo conectar con Ollama. Asegúrate de que esté ejecutándose localmente.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Available Models List */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+                      <Database className="w-4 h-4" /> Modelos Disponibles en Ollama
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {ollamaStatus.models.length > 0 ? (
+                        ollamaStatus.models.map((model, idx) => (
+                          <div key={idx} className="p-3 bg-white/5 border border-white/10 rounded-lg flex items-center justify-between group hover:border-purple-500/30 transition-all">
+                            <span className="text-sm text-gray-300 font-mono">{model.name}</span>
+                            <span className="text-[10px] text-gray-500 px-1.5 py-0.5 bg-white/5 rounded uppercase tracking-wider">
+                              {(model.size / (1024 * 1024 * 1024)).toFixed(1)} GB
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-2 py-8 text-center border border-dashed border-white/10 rounded-xl">
+                          <p className="text-sm text-gray-500 italic">No se encontraron modelos instalados.</p>
+                          <p className="text-xs text-gray-600 mt-1">Usa 'ollama pull llama3' en tu terminal.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Agent Mapping */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+                      <BrainCircuit className="w-4 h-4" /> Mapeo de Agentes Locales
+                    </h3>
+                    <div className="space-y-2">
+                      {[
+                        { agent: 'Orquestador', model: 'llama3', desc: 'Gestión y división de tareas' },
+                        { agent: 'Arquitecto', model: 'qwen2.5b', desc: 'Estructura y lógica de archivos' },
+                        { agent: 'Desarrollador', model: 'deep', desc: 'Escritura de código y lógica' },
+                        { agent: 'Revisor', model: 'llama3', desc: 'Control de calidad y bugs' }
+                      ].map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
+                          <div>
+                            <p className="text-sm font-medium text-white">{item.agent}</p>
+                            <p className="text-[10px] text-gray-500">{item.desc}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-mono text-purple-400 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/20">
+                              {item.model}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-black/20 border-t border-white/10 flex justify-end">
+                  <button
+                    onClick={() => setIsModelSettingsOpen(false)}
+                    className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-all"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import os from "os";
 const require = createRequire(import.meta.url);
 const pdf = require("pdf-parse");
 import mammoth from "mammoth";
+import * as prettier from "prettier";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,20 +34,42 @@ async function startServer() {
   // Helper: Extract files from LLM response
   function extractFiles(text: string, expectedFiles: string[]): Record<string, string> {
     const results: Record<string, string> = {};
-    const pattern = /```[\w]*:([^\s`\n]+)\s*\n([\s\S]*?)```/g;
-    let match;
     
-    while ((match = pattern.exec(text)) !== null) {
+    // Pattern 1: ```lang:path/to/file\ncontent\n```
+    const pattern1 = /```[\w]*:([^\s`\n]+)\s*\n([\s\S]*?)```/g;
+    let match;
+    while ((match = pattern1.exec(text)) !== null) {
       const filepath = match[1].trim();
       const content = match[2].trim();
       results[filepath] = content;
     }
 
+    // Pattern 2: Filename in a comment before the code block
+    // e.g. // src/main.py\n```python\n...```
+    const pattern2 = /(?:\/\/|#|--)\s*([^\s\n]+)\s*\n```[\w]*\n([\s\S]*?)```/g;
+    while ((match = pattern2.exec(text)) !== null) {
+      const filepath = match[1].trim();
+      const content = match[2].trim();
+      if (!results[filepath]) results[filepath] = content;
+    }
+
+    // Pattern 3: Generic blocks mapped to expected files (if only one block and one expected file)
     if (Object.keys(results).length === 0) {
       const genericPattern = /```(?:\w+)?\s*\n([\s\S]*?)```/g;
       let i = 0;
       while ((match = genericPattern.exec(text)) !== null && i < expectedFiles.length) {
-        results[expectedFiles[i]] = match[1].trim();
+        const content = match[1].trim();
+        // Try to find a filename in the text preceding the block
+        const textBefore = text.substring(0, match.index);
+        const linesBefore = textBefore.split('\n');
+        const lastLine = linesBefore[linesBefore.length - 1].trim();
+        
+        // If the last line looks like a path, use it
+        if (lastLine.includes('.') && !lastLine.includes(' ')) {
+          results[lastLine] = content;
+        } else {
+          results[expectedFiles[i]] = content;
+        }
         i++;
       }
     }
@@ -116,6 +139,17 @@ async function startServer() {
     }
   }
 
+  app.get("/api/ollama/status", async (req, res) => {
+    try {
+      const response = await fetch("http://localhost:11434/api/tags");
+      if (!response.ok) throw new Error("Ollama not responding correctly");
+      const data = await response.json();
+      res.json({ online: true, models: data.models || [] });
+    } catch (err: any) {
+      res.json({ online: false, error: err.message });
+    }
+  });
+
   app.post("/api/agents/run", async (req, res) => {
     const { prompt, modelType, agentConfig, systemPrompt } = req.body;
     
@@ -127,12 +161,23 @@ async function startServer() {
       if (modelType === "local" || modelType === "mixed") {
         triedLocal = true;
         try {
-          console.log("Intentando conectar a Ollama en http://localhost:11434/api/generate");
+          const modelMapping: Record<string, string> = {
+            'llama3': 'llama3:latest',
+            'qwen': 'qwen2.5:latest',
+            'qwen2.5b': 'qwen2.5:3b',
+            'deep': 'deepseek-coder:latest',
+            'deepseek': 'deepseek-coder:latest'
+          };
+          
+          const requestedModel = agentConfig.model?.toLowerCase() || "";
+          const ollamaModel = modelMapping[requestedModel] || requestedModel || "llama3:latest";
+
+          console.log(`Intentando conectar a Ollama (${ollamaModel}) en http://localhost:11434/api/generate`);
           const response = await fetch("http://localhost:11434/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: agentConfig.id === 'deepseek' ? "deepseek-coder:latest" : (agentConfig.id === 'programador' || agentConfig.id === 'revisor' ? "qwen2.5:7b" : "llama3:latest"),
+              model: ollamaModel,
               prompt: `${systemPrompt}\n\n---\n${prompt}`,
               stream: false,
               options: { temperature: 0.7, num_predict: 4096 }
@@ -142,25 +187,31 @@ async function startServer() {
           if (!response.ok) {
             const errorText = await response.text();
             console.error("Ollama error response:", response.status, errorText);
-            throw new Error(`Ollama not reachable: ${response.statusText}`);
+            throw new Error(`Ollama error (${response.status}): ${errorText}`);
           }
           const data = await response.json();
           console.log("Respuesta de Ollama recibida.");
           text = data.response;
-        } catch (err) {
+        } catch (err: any) {
           console.error("Error detallado al conectar con Ollama:", err);
           localFailed = true;
+          
           if (modelType === "local") {
-            res.status(503).json({ 
-              error: "No se pudo conectar con Ollama. Nota: En el entorno de vista previa en la nube, 'Local' no funcionará porque Ollama no está instalado en el contenedor. Por favor, cambia a 'Cloud' (Gemini) en el menú de la izquierda, o ejecuta la aplicación localmente en tu computadora." 
-            });
-            return;
+            const isCloud = process.env.NODE_ENV === "production" || process.env.K_SERVICE !== undefined;
+            const msg = isCloud 
+              ? "No se pudo conectar con Ollama. Nota: En el entorno de vista previa en la nube, 'Local' no funcionará porque Ollama no está instalado en el contenedor. Por favor, descarga el código y ejecútalo localmente en tu computadora para usar tus modelos locales."
+              : `No se pudo conectar con Ollama en http://localhost:11434. Asegúrate de que Ollama esté instalado y ejecutándose en tu máquina. Error: ${err.message}`;
+            
+            return res.status(503).json({ error: msg });
           }
           console.warn("Local failed, falling back to cloud...");
         }
       }
 
       if (!text && (modelType === "cloud" || localFailed)) {
+        if (!process.env.GEMINI_API_KEY) {
+          return res.status(401).json({ error: "GEMINI_API_KEY no configurada. Por favor, añade tu API key en los secretos de AI Studio." });
+        }
         const modelName = agentConfig.model || "gemini-1.5-flash";
         const result = await genAI.models.generateContent({ 
           model: modelName,
@@ -170,10 +221,39 @@ async function startServer() {
         text = result.text || "";
       }
 
+      if (!text) {
+        return res.status(500).json({ error: "No se pudo generar texto con ningún modelo." });
+      }
+
       const files = extractFiles(text, agentConfig.expectedFiles || []);
       res.json({ text, files });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      console.error("Critical error in /api/agents/run:", error);
+      res.status(500).json({ error: error.message || "Error interno del servidor" });
+    }
+  });
+
+  app.post("/api/format", async (req, res) => {
+    const { content, filepath } = req.body;
+    const ext = path.extname(filepath).toLowerCase();
+    
+    let parser = "babel-ts";
+    if (ext === ".css") parser = "css";
+    if (ext === ".html") parser = "html";
+    if (ext === ".json") parser = "json";
+    if (ext === ".md") parser = "markdown";
+
+    try {
+      const formatted = await prettier.format(content, {
+        parser,
+        semi: true,
+        singleQuote: true,
+        trailingComma: "all",
+      });
+      res.json({ formatted });
+    } catch (err: any) {
+      console.error("Formatting error:", err);
+      res.json({ formatted: content, error: err.message });
     }
   });
 
@@ -206,12 +286,154 @@ async function startServer() {
   app.post("/api/export/zip", (req, res) => {
     const { artifacts, projectName } = req.body;
     const zip = new AdmZip();
+    const folderName = projectName.replace(/\s+/g, '-').toLowerCase();
     Object.entries(artifacts).forEach(([filepath, content]) => {
-      zip.addFile(`${projectName}/${filepath}`, Buffer.from(content as string, "utf8"));
+      zip.addFile(`${folderName}/${filepath}`, Buffer.from(content as string, "utf8"));
     });
+    
+    // Add a README.md if not present
+    if (!artifacts['README.md']) {
+      const readme = `# ${projectName}\n\nGenerated by MultiAgent Lab.\n\n## Structure\n${Object.keys(artifacts).map(f => `- ${f}`).join('\n')}`;
+      zip.addFile(`${folderName}/README.md`, Buffer.from(readme, "utf8"));
+    }
+
     res.set("Content-Type", "application/zip");
-    res.set("Content-Disposition", `attachment; filename=${projectName}.zip`);
+    res.set("Content-Disposition", `attachment; filename=${folderName}.zip`);
     res.send(zip.toBuffer());
+  });
+
+  // GitHub OAuth & Export
+  app.get("/api/auth/github/url", (req, res) => {
+    const { clientId: customClientId, clientSecret: customClientSecret } = req.query;
+    
+    const clientId = (customClientId as string) || process.env.GITHUB_CLIENT_ID;
+    const clientSecret = (customClientSecret as string) || process.env.GITHUB_CLIENT_SECRET;
+    const redirectUri = process.env.GITHUB_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/auth/github/callback`;
+    
+    if (!clientId) {
+      return res.status(500).json({ error: "GITHUB_CLIENT_ID not configured" });
+    }
+
+    // Encode credentials in state to retrieve them in the callback
+    const state = Buffer.from(JSON.stringify({ clientId, clientSecret })).toString('base64');
+
+    const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=repo&state=${state}`;
+    res.json({ url });
+  });
+
+  app.get("/api/auth/github/callback", async (req, res) => {
+    const { code, state } = req.query;
+    
+    let clientId = process.env.GITHUB_CLIENT_ID;
+    let clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+    if (state) {
+      try {
+        const decodedState = JSON.parse(Buffer.from(state as string, 'base64').toString('utf8'));
+        if (decodedState.clientId) clientId = decodedState.clientId;
+        if (decodedState.clientSecret) clientSecret = decodedState.clientSecret;
+      } catch (e) {
+        console.error("Error decoding state:", e);
+      }
+    }
+
+    if (!code || !clientId || !clientSecret) {
+      return res.status(400).send("Missing code or configuration");
+    }
+
+    try {
+      const response = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        return res.status(400).send(`GitHub error: ${data.error_description || data.error}`);
+      }
+
+      // Return a simple HTML that posts the token to the opener
+      res.send(`
+        <html>
+          <body>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ type: 'GITHUB_AUTH_SUCCESS', token: '${data.access_token}' }, '*');
+                window.close();
+              } else {
+                document.body.innerHTML = 'Authentication successful! You can close this window.';
+              }
+            </script>
+          </body>
+        </html>
+      `);
+    } catch (err: any) {
+      res.status(500).send(`Error exchanging code: ${err.message}`);
+    }
+  });
+
+  app.post("/api/export/github", async (req, res) => {
+    const { token, repoName, description, artifacts, isPrivate } = req.body;
+
+    if (!token || !repoName || !artifacts) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    try {
+      // 1. Create Repository
+      const createRepoRes = await fetch("https://api.github.com/user/repos", {
+        method: "POST",
+        headers: {
+          "Authorization": `token ${token}`,
+          "Accept": "application/vnd.github.v3+json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          name: repoName,
+          description: description || "Generated by MultiAgent Lab",
+          private: isPrivate || false,
+          auto_init: true
+        })
+      });
+
+      if (!createRepoRes.ok) {
+        const err = await createRepoRes.json();
+        throw new Error(`Failed to create repo: ${err.message}`);
+      }
+
+      const repoData = await createRepoRes.json();
+      const owner = repoData.owner.login;
+
+      // 2. Commit Files (one by one for simplicity, though not ideal for many files)
+      for (const [path, content] of Object.entries(artifacts)) {
+        await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/${path}`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `token ${token}`,
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            message: `Add ${path}`,
+            content: Buffer.from(content as string).toString('base64')
+          })
+        });
+      }
+
+      res.json({ success: true, url: repoData.html_url });
+    } catch (err: any) {
+      console.error("GitHub Export Error:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   if (process.env.NODE_ENV !== "production") {

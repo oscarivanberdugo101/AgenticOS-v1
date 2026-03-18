@@ -36,3 +36,18 @@ export interface Activity {
   target: string;
   time: string;
 }
+
+export interface ProjectVersion {
+  id: string;
+  projectId: string;
+  versionNumber: number;
+  timestamp: string;
+  artifacts: Record<string, string>;
+  commitMessage: string;
+}
+
+export interface UserSettings {
+  githubClientId?: string;
+  githubClientSecret?: string;
+  githubRedirectUri?: string;
+}

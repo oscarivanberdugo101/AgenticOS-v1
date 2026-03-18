@@ -1,270 +1,208 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Cpu, Globe, ShieldCheck, Bot, Plus, Rocket, ArrowRight } from 'lucide-react';
+import React from 'react';
+import { motion } from 'motion/react';
+import { 
+  Cpu, 
+  Globe, 
+  ShieldCheck, 
+  Bot, 
+  Plus, 
+  ArrowRight, 
+  Activity, 
+  Layers, 
+  Zap,
+  Clock,
+  CheckCircle2
+} from 'lucide-react';
 
 interface DashboardSectionProps {
   projectsCount: number;
   onStartProject?: () => void;
 }
 
-const PARTICLES = [...Array(15)].map(() => ({
-  x: Math.random() * 1000 - 500,
-  y: Math.random() * 1000 - 500,
-  targetY: Math.random() * -200 - 100,
-  duration: Math.random() * 5 + 5,
-  delay: Math.random() * 5
-}));
-
 export const DashboardSection = ({ projectsCount, onStartProject }: DashboardSectionProps) => {
-  const isIdle = projectsCount === 0;
-  const [isHoveringCore, setIsHoveringCore] = useState(false);
+  const stats = [
+    { label: 'Proyectos Activos', value: projectsCount, icon: Layers, color: 'text-blue-400' },
+    { label: 'Agentes en Swarm', value: '7', icon: Bot, color: 'text-purple-400' },
+    { label: 'Carga del Sistema', value: '24%', icon: Cpu, color: 'text-emerald-400' },
+    { label: 'Uptime Global', value: '99.9%', icon: Activity, color: 'text-neon-blue' },
+  ];
+
+  const recentActivity = [
+    { id: 1, agent: 'Arquitecto', task: 'Estructura de API definida', time: 'hace 2 min', status: 'success' },
+    { id: 2, agent: 'Desarrollador', task: 'Implementación de Auth completada', time: 'hace 15 min', status: 'success' },
+    { id: 3, agent: 'Revisor', task: 'Auditoría de seguridad en proceso', time: 'hace 45 min', status: 'pending' },
+    { id: 4, agent: 'Director', task: 'Nuevo proyecto inicializado', time: 'hace 1 hora', status: 'success' },
+  ];
 
   return (
-    <div className="max-w-7xl mx-auto w-full h-full flex flex-col items-center justify-center space-y-24 relative overflow-hidden">
-      {/* Background Neural Grid Effect */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,243,255,0.05),transparent_70%)]" />
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0)', backgroundSize: '40px 40px' }} />
-      </div>
-
-      {/* Floating Data Particles */}
-      {!isIdle && PARTICLES.map((particle, i) => (
-        <motion.div
-          key={i}
-          initial={{ 
-            x: particle.x, 
-            y: particle.y,
-            opacity: 0 
-          }}
-          animate={{ 
-            y: [null, particle.targetY],
-            opacity: [0, 0.3, 0],
-            scale: [0, 1, 0]
-          }}
-          transition={{ 
-            duration: particle.duration, 
-            repeat: Infinity,
-            ease: "linear",
-            delay: particle.delay
-          }}
-          className="absolute size-1 bg-neon-blue rounded-full blur-[1px]"
-        />
-      ))}
-
-      {/* Central Atmospheric Pulse */}
-      <div className="relative size-[500px] flex items-center justify-center">
-        {/* Massive Glow Layers */}
-        <motion.div 
-          animate={{ scale: isIdle ? 1 : [1, 1.3, 1], opacity: isIdle ? 0.05 : [0.1, 0.25, 0.1] }}
-          transition={{ duration: 6, repeat: Infinity }}
-          className="absolute inset-0 bg-neon-blue/20 blur-[120px] rounded-full"
-        />
-        {!isIdle && (
-          <motion.div 
-            animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.5, 0.2] }}
-            transition={{ duration: 4, repeat: Infinity, delay: 1 }}
-            className="absolute inset-20 bg-purple-600/10 blur-[100px] rounded-full"
-          />
-        )}
-
-        {/* Rotating Energy Rings */}
-        <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ duration: isIdle ? 40 : 20, repeat: Infinity, ease: "linear" }}
-          className="absolute inset-0 border-[0.5px] border-dashed border-white/10 rounded-full"
-        />
-        <motion.div 
-          animate={{ rotate: -360 }}
-          transition={{ duration: isIdle ? 30 : 15, repeat: Infinity, ease: "linear" }}
-          className="absolute inset-12 border-[0.5px] border-dashed border-neon-blue/20 rounded-full"
-        />
-
-        {/* The Core Orb - Enhanced with CTA */}
-        <motion.div 
-          onMouseEnter={() => setIsHoveringCore(true)}
-          onMouseLeave={() => setIsHoveringCore(false)}
-          className="relative size-72 bg-black/60 backdrop-blur-3xl border border-white/20 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(0,243,255,0.1)] overflow-hidden group cursor-pointer"
-          onClick={isIdle ? onStartProject : undefined}
-        >
-          <div className="absolute inset-0 bg-gradient-to-tr from-neon-blue/20 via-transparent to-purple-500/20"></div>
-          
-          {/* Internal Energy Flow */}
-          <motion.div 
-            animate={{ 
-              background: isIdle 
-                ? 'radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 70%)'
-                : [
-                  'radial-gradient(circle at 50% 50%, rgba(0,243,255,0.1) 0%, transparent 70%)',
-                  'radial-gradient(circle at 30% 70%, rgba(168,85,247,0.1) 0%, transparent 70%)',
-                  'radial-gradient(circle at 50% 50%, rgba(0,243,255,0.1) 0%, transparent 70%)'
-                ]
-            }}
-            transition={{ duration: 5, repeat: Infinity }}
-            className="absolute inset-0"
-          />
-
-          <div className="relative z-10 flex flex-col items-center text-center px-6">
-            <AnimatePresence mode="wait">
-              {isIdle && isHoveringCore ? (
-                <motion.div
-                  key="cta"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="flex flex-col items-center"
-                >
-                  <div className="size-16 bg-neon-blue rounded-full flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(0,243,255,0.4)]">
-                    <Plus size={32} className="text-black" />
-                  </div>
-                  <p className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Nuevo Proyecto</p>
-                  <p className="text-[8px] text-neon-blue mt-2 font-mono uppercase tracking-widest">Inicializar Pipeline</p>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="status"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="flex flex-col items-center"
-                >
-                  <motion.div
-                    animate={isIdle ? {} : { 
-                      y: [0, -8, 0],
-                      filter: ['drop-shadow(0 0 0px #fff)', 'drop-shadow(0 0 10px #00f3ff)', 'drop-shadow(0 0 0px #fff)']
-                    }}
-                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  >
-                    <Cpu size={56} className={`${isIdle ? 'text-neutral-700' : 'text-white'} mb-4`} />
-                  </motion.div>
-                  <div className="space-y-1">
-                    <h3 className="text-5xl font-extralight text-white tracking-tighter">
-                      {isIdle ? '00.0' : '99.8'}<span className="text-xl opacity-50">%</span>
-                    </h3>
-                    <p className={`text-[9px] font-black ${isIdle ? 'text-neutral-700' : 'text-neon-blue'} uppercase tracking-[0.6em]`}>
-                      {isIdle ? 'Standby' : 'Integrity'}
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Scanning Line */}
-          {!isIdle && (
-            <motion.div 
-              animate={{ top: ['-20%', '120%'] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute left-0 w-full h-12 bg-gradient-to-b from-transparent via-neon-blue/10 to-transparent"
-            />
-          )}
-        </motion.div>
-
-        {/* Orbiting Status Nodes */}
-        {[
-          { label: 'Network', val: isIdle ? 'Idle' : 'Active', color: isIdle ? 'bg-neutral-800' : 'bg-emerald-500', angle: 0, icon: <Globe size={10} /> },
-          { label: 'Security', val: isIdle ? 'Locked' : 'Shielded', color: isIdle ? 'bg-neutral-800' : 'bg-neon-blue', angle: 120, icon: <ShieldCheck size={10} /> },
-          { label: 'Agents', val: isIdle ? 'Waiting' : 'Synced', color: isIdle ? 'bg-neutral-800' : 'bg-purple-500', angle: 240, icon: <Bot size={10} /> },
-        ].map((node, i) => {
-          const x = Math.cos((node.angle * Math.PI) / 180) * 260;
-          const y = Math.sin((node.angle * Math.PI) / 180) * 260;
-          return (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ x, y, opacity: 1, scale: 1 }}
-              transition={{ duration: 1, delay: 0.8 + i * 0.2, type: "spring" }}
-              className="absolute group cursor-pointer"
-            >
-              <div className="relative flex flex-col items-center">
-                <div className="absolute -inset-4 bg-white/5 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="size-10 bg-black/40 backdrop-blur-md border border-white/10 rounded-xl flex items-center justify-center mb-3 group-hover:border-white/30 transition-all group-hover:-translate-y-1">
-                  <div className={`size-1.5 rounded-full absolute -top-1 -right-1 shadow-[0_0_10px_currentColor]`} style={{ backgroundColor: node.color.replace('bg-', ''), color: node.color.replace('bg-', '') }}></div>
-                  <span className="text-white/60 group-hover:text-white transition-colors">{node.icon}</span>
-                </div>
-                <p className="text-[8px] font-black text-white uppercase tracking-widest mb-0.5">{node.label}</p>
-                <p className="text-[10px] font-mono text-neutral-500 group-hover:text-neon-blue transition-colors">{node.val}</p>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {/* Quick Config / Create Entry */}
-      {isIdle && (
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.5 }}
-          className="flex flex-col items-center space-y-8"
-        >
-          <div className="flex flex-col items-center text-center max-w-md">
-            <h2 className="text-2xl font-extralight text-white tracking-tight mb-2">Laboratorio de Desarrollo Autónomo</h2>
-            <p className="text-xs text-neutral-500 uppercase tracking-[0.2em] leading-relaxed">
-              Inicializa tu primer proyecto para activar los agentes de IA y comenzar la producción de código.
-            </p>
-          </div>
-          
-          <div className="flex gap-4">
-            <button 
-              onClick={onStartProject}
-              className="group flex items-center gap-4 px-8 py-4 bg-white text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:bg-neon-blue transition-all shadow-2xl"
-            >
-              <Plus size={16} />
-              Crear Nuevo Proyecto
-              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-            <button className="px-8 py-4 bg-white/5 border border-white/10 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:bg-white/10 transition-all">
-              Ver Tutorial
-            </button>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Modern Insight Cards */}
-      {!isIdle && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl relative z-10">
-          {[
-            { label: 'Neural Throughput', value: isIdle ? '0.0' : '1.4k', unit: 'ops/s', desc: 'Optimización de flujo de datos por IA', trend: isIdle ? 'Idle' : '+12%' },
-            { label: 'Error Mitigation', value: isIdle ? '00' : '84', unit: '%', desc: 'Reducción proactiva de fallos sistémicos', trend: isIdle ? 'Idle' : 'Stable' },
-            { label: 'Active Nodes', value: isIdle ? '0' : '24', unit: 'clones', desc: 'Instancias de agentes en ejecución paralela', trend: isIdle ? 'Idle' : 'Live' },
-          ].map((insight, i) => (
-            <motion.div 
-              key={i}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.2 + i * 0.2 }}
-              className="relative group p-8 bg-white/[0.02] border border-white/5 rounded-[2rem] hover:bg-white/[0.04] hover:border-white/10 transition-colors duration-500 overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 w-1 h-full bg-neon-blue scale-y-0 group-hover:scale-y-100 transition-transform origin-top duration-500" />
-              
-              <div className="flex justify-between items-start mb-6">
-                <p className="text-[9px] font-black text-neutral-500 uppercase tracking-[0.3em] group-hover:text-white transition-colors">{insight.label}</p>
-                <span className={`text-[8px] font-mono ${isIdle ? 'text-neutral-700 bg-neutral-900' : 'text-neon-blue bg-neon-blue/10'} px-2 py-0.5 rounded-full`}>{insight.trend}</span>
-              </div>
-
-              <div className="flex items-baseline gap-2 mb-4">
-                <span className="text-5xl font-extralight text-white tracking-tighter">{insight.value}</span>
-                <span className="text-xs font-bold text-neutral-600 uppercase tracking-widest">{insight.unit}</span>
-              </div>
-
-              <p className="text-[10px] text-neutral-500 font-medium leading-relaxed opacity-60 group-hover:opacity-100 transition-opacity">
-                {insight.desc}
-              </p>
-
-              {/* Subtle background graph line */}
-              <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neon-blue/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            </motion.div>
-          ))}
+    <div className="max-w-6xl mx-auto w-full space-y-12 py-8">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-white/5 pb-12">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-light text-white tracking-tight">Panel de Control</h1>
+          <p className="text-neutral-500 text-[10px] uppercase tracking-[0.4em] font-bold">Estado Operativo del Ecosistema de Agentes</p>
         </div>
-      )}
+        <button 
+          onClick={onStartProject}
+          className="flex items-center gap-3 px-6 py-3 bg-white text-black rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-neon-blue transition-all shadow-lg group"
+        >
+          <Plus size={14} />
+          Nuevo Proyecto
+          <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
+        </button>
+      </div>
 
-      {/* Atmospheric Background Text */}
-      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-none select-none">
-        <h1 className="text-[20vw] font-black uppercase tracking-tighter leading-none text-white/[0.02] blur-[2px]">
-          OS.CORE
-        </h1>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl hover:bg-white/[0.04] transition-colors group"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className={`p-2 rounded-lg bg-white/5 ${stat.color}`}>
+                <stat.icon size={18} />
+              </div>
+              <span className="text-[8px] font-mono text-neutral-600 uppercase tracking-widest">Live</span>
+            </div>
+            <p className="text-3xl font-light text-white mb-1">{stat.value}</p>
+            <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Overview Card */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="p-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
+              <ShieldCheck size={120} className="text-white" />
+            </div>
+            
+            <div className="relative z-10 space-y-8">
+              <div className="flex items-center gap-3">
+                <div className="size-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
+                <h3 className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Integridad del Núcleo</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest text-neutral-400">
+                      <span>Eficiencia de Agentes</span>
+                      <span>94%</span>
+                    </div>
+                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: '94%' }}
+                        className="h-full bg-neon-blue"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest text-neutral-400">
+                      <span>Seguridad de Código</span>
+                      <span>98%</span>
+                    </div>
+                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: '98%' }}
+                        className="h-full bg-purple-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <div className="size-24 rounded-full border-4 border-white/5 flex items-center justify-center relative">
+                    <svg className="absolute inset-0 size-24 -rotate-90">
+                      <circle
+                        cx="48"
+                        cy="48"
+                        r="44"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        className="text-neon-blue"
+                        strokeDasharray={276}
+                        strokeDashoffset={276 * (1 - 0.85)}
+                      />
+                    </svg>
+                    <span className="text-xl font-light text-white">85%</span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-white uppercase tracking-widest">Optimización</p>
+                    <p className="text-[9px] text-neutral-500 leading-relaxed">El sistema está operando en parámetros óptimos de producción.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Secondary Features Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl flex items-center gap-6">
+              <div className="size-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+                <Zap size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">Respuesta Rápida</p>
+                <p className="text-[9px] text-neutral-500">Latencia media de agentes: 1.2s</p>
+              </div>
+            </div>
+            <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl flex items-center gap-6">
+              <div className="size-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                <Globe size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-white uppercase tracking-widest mb-1">Nodos Globales</p>
+                <p className="text-[9px] text-neutral-500">4 regiones activas</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Activity Sidebar */}
+        <div className="space-y-6">
+          <div className="p-8 bg-white/[0.02] border border-white/5 rounded-[2.5rem] h-full">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-[10px] font-black text-white uppercase tracking-[0.4em]">Actividad Reciente</h3>
+              <Clock size={14} className="text-neutral-600" />
+            </div>
+
+            <div className="space-y-6">
+              {recentActivity.map((item) => (
+                <div key={item.id} className="flex gap-4 group">
+                  <div className="relative">
+                    <div className={`size-2 rounded-full mt-1.5 ${item.status === 'success' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                    {item.id !== recentActivity.length && (
+                      <div className="absolute top-4 left-1 w-[1px] h-10 bg-white/5" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-white uppercase tracking-widest">{item.agent}</span>
+                      <span className="text-[8px] text-neutral-600 font-mono">{item.time}</span>
+                    </div>
+                    <p className="text-[10px] text-neutral-400 group-hover:text-neutral-200 transition-colors">{item.task}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button className="w-full mt-10 py-3 border border-white/5 rounded-xl text-[9px] font-bold text-neutral-500 uppercase tracking-widest hover:bg-white/5 transition-all">
+              Ver Historial Completo
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
+
 

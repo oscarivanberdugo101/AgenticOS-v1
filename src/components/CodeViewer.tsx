@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { FileCode, Folder, ChevronRight, ChevronDown, Download, Copy, Check } from 'lucide-react';
+import { FileCode, Folder, ChevronRight, ChevronDown, Download, Copy, Check, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CodeViewerProps {
   artifacts: Record<string, string>;
   onDownload: () => void;
+  onRefactor?: (path: string) => void;
 }
 
-export const CodeViewer = ({ artifacts, onDownload }: CodeViewerProps) => {
+export const CodeViewer = ({ artifacts, onDownload, onRefactor }: CodeViewerProps) => {
   const [selectedFile, setSelectedFile] = useState<string | null>(
     Object.keys(artifacts).length > 0 ? Object.keys(artifacts)[0] : null
   );
@@ -79,6 +80,16 @@ export const CodeViewer = ({ artifacts, onDownload }: CodeViewerProps) => {
             </span>
           </div>
           <div className="flex items-center gap-4">
+            {onRefactor && selectedFile && (
+              <button 
+                onClick={() => onRefactor(selectedFile)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-lg hover:bg-indigo-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"
+                title="Refactorizar con IA"
+              >
+                <Zap size={12} />
+                Refactorizar
+              </button>
+            )}
             <button 
               onClick={handleCopy}
               className="p-2 text-neutral-400 hover:text-white transition-colors"
