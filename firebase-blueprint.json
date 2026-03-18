@@ -20,6 +20,28 @@
         "brief": { "type": "string", "description": "Discovery brief of the project." }
       },
       "required": ["id", "title", "description", "status", "lastUpdated", "ownerId"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Represents a user profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["uid", "email"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "Represents user-specific settings and integrations.",
+      "type": "object",
+      "properties": {
+        "githubClientId": { "type": "string" },
+        "githubClientSecret": { "type": "string" },
+        "githubRedirectUri": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -34,6 +56,14 @@
     "/projects/{projectId}/artifacts/{artifactId}": {
       "schema": { "$ref": "Artifact" },
       "description": "Artifacts generated for a project."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": { "$ref": "UserSettings" },
+      "description": "User settings."
     }
   }
 }
