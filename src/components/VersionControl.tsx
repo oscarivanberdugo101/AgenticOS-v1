@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ProjectVersion } from '../types';
 import { collection, query, where, orderBy, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import * as Diff from 'diff';
 
 interface VersionControlProps {
@@ -33,6 +34,8 @@ export const VersionControl: React.FC<VersionControlProps> = ({ projectId, curre
         id: doc.id
       } as ProjectVersion));
       setVersions(versionsData);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `projects/${projectId}/versions`);
     });
 
     return () => unsubscribe();

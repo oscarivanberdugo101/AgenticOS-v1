@@ -81,6 +81,7 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
+import { handleFirestoreError, OperationType } from './utils/firestoreErrorHandler';
 
 const INITIAL_PROJECTS: Project[] = [];
 
@@ -138,15 +139,10 @@ export default function App() {
   const [projectDetailTab, setProjectDetailTab] = useState<'artifacts' | 'sandbox' | 'versions' | 'export'>('artifacts');
   const [streamingText, setStreamingText] = useState("");
   const [agentThinking, setAgentThinking] = useState(false);
-  const [modelSource, setModelSource] = useState<'cloud' | 'local'>('local');
   const [ollamaStatus, setOllamaStatus] = useState<{online: boolean, models: any[], error?: string}>({online: false, models: []});
-  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator('local'));
+  const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator());
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const dragControls = useDragControls();
-
-  useEffect(() => {
-    setOrchestrator(new AgentOrchestrator(modelSource));
-  }, [modelSource]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -177,10 +173,6 @@ export default function App() {
     const interval = setInterval(checkOllama, 30000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    setOrchestrator(new AgentOrchestrator(modelSource));
-  }, [modelSource]);
 
   const handleLogin = async () => {
     try {
@@ -263,7 +255,7 @@ export default function App() {
       setProjectStages(prev => ({ ...prev, ...newStages }));
       setProjectBriefs(prev => ({ ...prev, ...newBriefs }));
     }, (error) => {
-      console.error("Firestore Error (projects):", error);
+      handleFirestoreError(error, OperationType.GET, 'projects');
     });
 
     return () => unsubscribe();
@@ -295,6 +287,8 @@ export default function App() {
           });
         }
       }
+    }).catch(error => {
+      handleFirestoreError(error, OperationType.GET, `projects/${activeProjectId}`);
     });
 
     // Load chats into orchestrator context
@@ -312,7 +306,8 @@ export default function App() {
             type: 'chat'
           });
         });
-      }
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, `projects/${activeProjectId}/chats`)
     );
 
     // Load artifacts into orchestrator context
@@ -332,7 +327,8 @@ export default function App() {
           });
         });
         setProjectArtifacts(prev => ({ ...prev, [activeProjectId]: artifactsMap }));
-      }
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, `projects/${activeProjectId}/artifacts`)
     );
 
     return () => {
@@ -355,12 +351,16 @@ export default function App() {
 
     // Save user message to Firebase if project exists
     if (activeProjectId) {
-      addDoc(collection(db, `projects/${activeProjectId}/chats`), {
-        role: 'user',
-        content: userMsg,
-        timestamp: serverTimestamp(),
-        projectId: activeProjectId
-      });
+      try {
+        await addDoc(collection(db, `projects/${activeProjectId}/chats`), {
+          role: 'user',
+          content: userMsg,
+          timestamp: serverTimestamp(),
+          projectId: activeProjectId
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, `projects/${activeProjectId}/chats`);
+      }
     }
 
     setChatMessages(prev => [...prev, { role: 'user', content: userMsg }]);
@@ -383,12 +383,16 @@ export default function App() {
 
       // Save assistant message to Firebase
       if (activeProjectId) {
-        addDoc(collection(db, `projects/${activeProjectId}/chats`), {
-          role: 'assistant',
-          content: result.output,
-          timestamp: serverTimestamp(),
-          projectId: activeProjectId
-        });
+        try {
+          await addDoc(collection(db, `projects/${activeProjectId}/chats`), {
+            role: 'assistant',
+            content: result.output,
+            timestamp: serverTimestamp(),
+            projectId: activeProjectId
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.CREATE, `projects/${activeProjectId}/chats`);
+        }
       }
 
       setChatMessages(prev => [...prev, { role: 'assistant', content: result.output }]);
@@ -414,11 +418,15 @@ export default function App() {
           setProjectStages(prev => ({ ...prev, [activeProjectId]: 'kickoff' }));
           
           // Update project in Firestore
-          setDoc(doc(db, 'projects', activeProjectId), {
-            brief,
-            stage: 'kickoff',
-            lastUpdated: new Date().toISOString()
-          }, { merge: true });
+          try {
+            await setDoc(doc(db, 'projects', activeProjectId), {
+              brief,
+              stage: 'kickoff',
+              lastUpdated: new Date().toISOString()
+            }, { merge: true });
+          } catch (error) {
+            handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProjectId}`);
+          }
         }
       }
     } catch (err) {
@@ -457,12 +465,16 @@ export default function App() {
           }));
           
           // Save kickoff message to Firebase
-          addDoc(collection(db, `projects/${activeProjectId}/chats`), {
-            role: 'assistant',
-            content: `[KICKOFF - ${agent.name}]: ${result.output}`,
-            timestamp: serverTimestamp(),
-            projectId: activeProjectId
-          });
+          try {
+            await addDoc(collection(db, `projects/${activeProjectId}/chats`), {
+              role: 'assistant',
+              content: `[KICKOFF - ${agent.name}]: ${result.output}`,
+              timestamp: serverTimestamp(),
+              projectId: activeProjectId
+            });
+          } catch (error) {
+            handleFirestoreError(error, OperationType.CREATE, `projects/${activeProjectId}/chats`);
+          }
         }
         setStreamingText("");
       } catch (err) {
@@ -503,7 +515,7 @@ export default function App() {
         type: 'arch'
       }, ...prev]);
     } catch (err) {
-      console.error("Error saving version:", err);
+      handleFirestoreError(err, OperationType.WRITE, `projects/${projectId}/versions`);
     }
   };
 
@@ -515,10 +527,14 @@ export default function App() {
     setProjectStages(prev => ({ ...prev, [activeProjectId]: 'development' }));
     
     // Update stage in Firestore
-    setDoc(doc(db, 'projects', activeProjectId), {
-      stage: 'development',
-      lastUpdated: new Date().toISOString()
-    }, { merge: true });
+    try {
+      await setDoc(doc(db, 'projects', activeProjectId), {
+        stage: 'development',
+        lastUpdated: new Date().toISOString()
+      }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `projects/${activeProjectId}`);
+    }
 
     setIsPipelineRunning(true);
     setArtifacts({});
@@ -561,12 +577,16 @@ export default function App() {
           // Save artifacts to Firestore
           for (const [path, content] of Object.entries(formattedFiles)) {
             const artifactId = path.replace(/\//g, '_');
-            setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
-              projectId: activeProjectId,
-              path,
-              content,
-              timestamp: serverTimestamp()
-            });
+            try {
+              await setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
+                projectId: activeProjectId,
+                path,
+                content,
+                timestamp: serverTimestamp()
+              });
+            } catch (error) {
+              handleFirestoreError(error, OperationType.CREATE, `projects/${activeProjectId}/artifacts/${artifactId}`);
+            }
           }
         }
         setStreamingText("");
@@ -648,7 +668,9 @@ export default function App() {
       );
       
       await Promise.race([
-        setDoc(doc(db, 'projects', projectId), newProject),
+        setDoc(doc(db, 'projects', projectId), newProject).catch(error => {
+          handleFirestoreError(error, OperationType.CREATE, `projects/${projectId}`);
+        }),
         timeoutPromise
       ]);
       
@@ -758,12 +780,16 @@ export default function App() {
           // Save to Firestore
           for (const [filePath, fileContent] of Object.entries(newFiles)) {
             const artifactId = filePath.replace(/\//g, '_');
-            await setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
-              projectId: activeProjectId,
-              path: filePath,
-              content: fileContent,
-              timestamp: serverTimestamp()
-            });
+            try {
+              await setDoc(doc(db, `projects/${activeProjectId}/artifacts`, artifactId), {
+                projectId: activeProjectId,
+                path: filePath,
+                content: fileContent,
+                timestamp: serverTimestamp()
+              });
+            } catch (error) {
+              handleFirestoreError(error, OperationType.WRITE, `projects/${activeProjectId}/artifacts/${artifactId}`);
+            }
           }
         }
         setStreamingText(`Refactorización completada para ${path}.`);
@@ -961,20 +987,13 @@ export default function App() {
                   <p className="text-[8px] font-black uppercase tracking-[0.3em] text-neutral-600 mb-4">Model Source</p>
                   <div className="flex bg-white/5 rounded-lg p-1">
                     <button 
-                      onClick={() => setModelSource('cloud')}
-                      className={`flex-1 py-1.5 text-[8px] font-black uppercase tracking-widest rounded-md transition-all ${modelSource === 'cloud' ? 'bg-white text-black' : 'text-neutral-500 hover:text-white'}`}
-                    >
-                      Cloud
-                    </button>
-                    <button 
-                      onClick={() => setModelSource('local')}
-                      className={`flex-1 py-1.5 text-[8px] font-black uppercase tracking-widest rounded-md transition-all ${modelSource === 'local' ? 'bg-white text-black' : 'text-neutral-500 hover:text-white'}`}
+                      className="flex-1 py-1.5 text-[8px] font-black uppercase tracking-widest rounded-md transition-all bg-white text-black"
                     >
                       Local
                     </button>
                   </div>
                   <p className="text-[7px] text-neutral-600 mt-2 font-mono italic">
-                    {modelSource === 'local' ? 'Ollama: Llama3/Qwen2.5' : 'Gemini 1.5/2.0'}
+                    Ollama: Llama3/Qwen2.5
                   </p>
                 </div>
 
@@ -1168,6 +1187,8 @@ export default function App() {
                                   path,
                                   content,
                                   timestamp: serverTimestamp()
+                                }).catch(error => {
+                                  handleFirestoreError(error, OperationType.WRITE, `projects/${activeProjectId}/artifacts/${artifactId}`);
                                 });
                               });
                             }
@@ -1186,6 +1207,8 @@ export default function App() {
                                 path,
                                 content,
                                 timestamp: serverTimestamp()
+                              }).catch(error => {
+                                handleFirestoreError(error, OperationType.WRITE, `projects/${activeProjectId}/artifacts/${artifactId}`);
                               });
                             }
                             setProjectDetailTab('artifacts');
@@ -1551,7 +1574,8 @@ export default function App() {
                         { agent: 'Orquestador', model: 'llama3', desc: 'Gestión y división de tareas' },
                         { agent: 'Arquitecto', model: 'qwen2.5b', desc: 'Estructura y lógica de archivos' },
                         { agent: 'Desarrollador', model: 'deep', desc: 'Escritura de código y lógica' },
-                        { agent: 'Revisor', model: 'llama3', desc: 'Control de calidad y bugs' }
+                        { agent: 'Revisor', model: 'llama3', desc: 'Control de calidad y bugs' },
+                        { agent: 'Alternativo', model: 'openclaw', desc: 'Modelo Open Coder/Claw' }
                       ].map((item, idx) => (
                         <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
                           <div>

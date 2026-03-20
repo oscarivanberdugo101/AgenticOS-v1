@@ -3,7 +3,6 @@ import { createServer as createViteServer } from "vite";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { GoogleGenAI } from "@google/genai";
 import AdmZip from "adm-zip";
 import multer from "multer";
 import { createRequire } from "module";
@@ -27,9 +26,6 @@ async function startServer() {
 
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
-
-  // Gemini Setup
-  const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
   // Helper: Extract files from LLM response
   function extractFiles(text: string, expectedFiles: string[]): Record<string, string> {
@@ -151,85 +147,60 @@ async function startServer() {
   });
 
   app.post("/api/agents/run", async (req, res) => {
-    const { prompt, modelType, agentConfig, systemPrompt } = req.body;
+    const { prompt, agentConfig, systemPrompt } = req.body;
     
     try {
       let text = "";
-      let triedLocal = false;
-      let localFailed = false;
 
-      if (modelType === "local" || modelType === "mixed") {
-        triedLocal = true;
-        try {
-          const modelMapping: Record<string, string> = {
-            'llama3': 'llama3:latest',
-            'qwen': 'qwen2.5:latest',
-            'qwen2.5b': 'qwen2.5:3b',
-            'deep': 'deepseek-coder:latest',
-            'deepseek': 'deepseek-coder:latest'
-          };
-          
-          const requestedModel = agentConfig.model?.toLowerCase() || "";
-          const ollamaModel = modelMapping[requestedModel] || requestedModel || "llama3:latest";
+      const modelMapping: Record<string, string> = {
+        'llama3': 'llama3:latest',
+        'qwen': 'qwen2.5:latest',
+        'qwen2.5b': 'qwen2.5:3b',
+        'deep': 'deepseek-coder:latest',
+        'deepseek': 'deepseek-coder:latest',
+        'open claw': 'openclaw:latest',
+        'openclaw': 'openclaw:latest',
+        'opencoder': 'opencoder:latest'
+      };
+      
+      const requestedModel = agentConfig.model?.toLowerCase() || "";
+      const ollamaModel = modelMapping[requestedModel] || requestedModel || "llama3:latest";
 
-          console.log(`Intentando conectar a Ollama (${ollamaModel}) en http://localhost:11434/api/generate`);
-          const response = await fetch("http://localhost:11434/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: ollamaModel,
-              prompt: `${systemPrompt}\n\n---\n${prompt}`,
-              stream: false,
-              options: { temperature: 0.7, num_predict: 4096 }
-            })
-          });
+      console.log(`Intentando conectar a Ollama (${ollamaModel}) en http://localhost:11434/api/generate`);
+      const response = await fetch("http://localhost:11434/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: ollamaModel,
+          prompt: `${systemPrompt}\n\n---\n${prompt}`,
+          stream: false,
+          options: { temperature: 0.7, num_predict: 4096 }
+        })
+      });
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("Ollama error response:", response.status, errorText);
-            throw new Error(`Ollama error (${response.status}): ${errorText}`);
-          }
-          const data = await response.json();
-          console.log("Respuesta de Ollama recibida.");
-          text = data.response;
-        } catch (err: any) {
-          console.error("Error detallado al conectar con Ollama:", err);
-          localFailed = true;
-          
-          if (modelType === "local") {
-            const isCloud = process.env.NODE_ENV === "production" || process.env.K_SERVICE !== undefined;
-            const msg = isCloud 
-              ? "No se pudo conectar con Ollama. Nota: En el entorno de vista previa en la nube, 'Local' no funcionará porque Ollama no está instalado en el contenedor. Por favor, descarga el código y ejecútalo localmente en tu computadora para usar tus modelos locales."
-              : `No se pudo conectar con Ollama en http://localhost:11434. Asegúrate de que Ollama esté instalado y ejecutándose en tu máquina. Error: ${err.message}`;
-            
-            return res.status(503).json({ error: msg });
-          }
-          console.warn("Local failed, falling back to cloud...");
-        }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Ollama error response:", response.status, errorText);
+        throw new Error(`Ollama error (${response.status}): ${errorText}`);
       }
-
-      if (!text && (modelType === "cloud" || localFailed)) {
-        if (!process.env.GEMINI_API_KEY) {
-          return res.status(401).json({ error: "GEMINI_API_KEY no configurada. Por favor, añade tu API key en los secretos de AI Studio." });
-        }
-        const modelName = agentConfig.model || "gemini-3-flash-preview";
-        const result = await genAI.models.generateContent({ 
-          model: modelName,
-          contents: prompt,
-          config: { systemInstruction: systemPrompt }
-        });
-        text = result.text || "";
-      }
+      const data = await response.json();
+      console.log("Respuesta de Ollama recibida.");
+      text = data.response;
 
       if (!text) {
-        return res.status(500).json({ error: "No se pudo generar texto con ningún modelo." });
+        return res.status(500).json({ error: "No se pudo generar texto con el modelo local." });
       }
 
       const files = extractFiles(text, agentConfig.expectedFiles || []);
       res.json({ text, files });
     } catch (error: any) {
       console.error("Critical error in /api/agents/run:", error);
-      res.status(500).json({ error: error.message || "Error interno del servidor" });
+      const isCloud = process.env.NODE_ENV === "production" || process.env.K_SERVICE !== undefined;
+      const msg = isCloud 
+        ? "No se pudo conectar con Ollama. Nota: En el entorno de vista previa en la nube, 'Local' no funcionará porque Ollama no está instalado en el contenedor. Por favor, descarga el código y ejecútalo localmente en tu computadora para usar tus modelos locales."
+        : `No se pudo conectar con Ollama en http://localhost:11434. Asegúrate de que Ollama esté instalado y ejecutándose en tu máquina. Error: ${error.message}`;
+      
+      res.status(503).json({ error: msg });
     }
   });
 

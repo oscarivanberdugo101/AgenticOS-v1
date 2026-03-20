@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { UserSettings } from '../types';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
 interface SettingsSectionProps {
   userId: string;
@@ -25,7 +26,7 @@ export const SettingsSection = ({ userId }: SettingsSectionProps) => {
           setSettings(docSnap.data() as UserSettings);
         }
       } catch (err: any) {
-        console.error("Error fetching settings:", err);
+        handleFirestoreError(err, OperationType.GET, `users/${userId}/settings/integrations`);
         setError("Error al cargar la configuración.");
       } finally {
         setLoading(false);
@@ -47,7 +48,7 @@ export const SettingsSection = ({ userId }: SettingsSectionProps) => {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
-      console.error("Error saving settings:", err);
+      handleFirestoreError(err, OperationType.WRITE, `users/${userId}/settings/integrations`);
       setError("Error al guardar la configuración.");
     } finally {
       setSaving(false);

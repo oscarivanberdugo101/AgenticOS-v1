@@ -1,4 +1,3 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { z } from 'zod';
 import { ContextManager } from './contextManager';
 
@@ -29,7 +28,7 @@ export const AGENTS: AgentConfig[] = [
     id: 'director',
     name: 'Director de Proyecto',
     role: 'Director',
-    model: 'gemini-3-flash-preview',
+    model: 'llama3',
     icon: 'director',
     color: '#FFD700',
     expectedFiles: [],
@@ -58,7 +57,7 @@ RESPONDE SIEMPRE EN FORMATO JSON ESTRUCTURADO:
     id: 'arquitecto',
     name: 'Arquitecto Cloud',
     role: 'Architect',
-    model: 'gemini-3.1-pro-preview',
+    model: 'qwen',
     icon: 'arch',
     color: '#4F8EF7',
     expectedFiles: ['src/architecture/spec.md', 'src/database/schema.sql'],
@@ -84,7 +83,7 @@ RESPONDE SIEMPRE EN FORMATO JSON ESTRUCTURADO:
     id: 'programador',
     name: 'Ingeniero Full-Stack',
     role: 'Developer',
-    model: 'gemini-3.1-pro-preview',
+    model: 'qwen',
     icon: 'prog',
     color: '#2DD4BF',
     expectedFiles: ['src/logic/core.py', 'src/api/routes.py'],
@@ -110,7 +109,7 @@ RESPONDE SIEMPRE EN FORMATO JSON ESTRUCTURADO:
     id: 'disenador',
     name: 'Diseñador UI/UX',
     role: 'Designer',
-    model: 'gemini-3-flash-preview',
+    model: 'llama3',
     icon: 'design',
     color: '#A78BFA',
     expectedFiles: ['src/ui/components.py', 'src/static/theme.css'],
@@ -136,7 +135,7 @@ RESPONDE SIEMPRE EN FORMATO JSON ESTRUCTURADO:
     role: 'Especialista en Testing y Calidad',
     color: '#f59e0b',
     icon: 'CheckCircle2',
-    model: 'gemini-3-flash-preview',
+    model: 'llama3',
     expectedFiles: ['.test.ts', '.spec.tsx'],
     systemPrompt: `Eres el QA Engineer de la agencia. Tu misión es generar pruebas unitarias y de integración para el código generado.
     
@@ -156,7 +155,7 @@ RESPONDE SIEMPRE EN FORMATO JSON ESTRUCTURADO:
     id: 'revisor',
     name: 'Especialista SecDevOps',
     role: 'Security',
-    model: 'gemini-3-flash-preview',
+    model: 'llama3',
     icon: 'sec',
     color: '#F87171',
     expectedFiles: ['tests/security_audit.md', 'tests/unit_tests.py'],
@@ -181,7 +180,7 @@ RESPONDE SIEMPRE EN FORMATO JSON ESTRUCTURADO:
     id: 'devops',
     name: 'Ingeniero DevOps',
     role: 'DevOps',
-    model: 'gemini-3-flash-preview',
+    model: 'llama3',
     icon: 'devops',
     color: '#FBBF24',
     expectedFiles: ['infrastructure/Dockerfile', 'infrastructure/docker-compose.yml'],
@@ -196,7 +195,7 @@ INSTRUCCIONES DE RAZONAMIENTO:
     id: 'analista',
     name: 'Technical Writer',
     role: 'Analyst',
-    model: 'gemini-3-flash-preview',
+    model: 'llama3',
     icon: 'doc',
     color: '#34D399',
     expectedFiles: ['README.md', 'docs/ARCHITECTURE.md'],
@@ -211,7 +210,7 @@ INSTRUCCIONES DE RAZONAMIENTO:
     id: 'pm',
     name: 'Product Manager',
     role: 'PM',
-    model: 'gemini-3-flash-preview',
+    model: 'llama3',
     icon: 'pm',
     color: '#94A3B8',
     expectedFiles: ['project/ROADMAP.md', 'project/REQUIREMENTS.txt'],
@@ -226,7 +225,7 @@ INSTRUCCIONES DE RAZONAMIENTO:
     id: 'refactorer',
     name: 'Refactorizador de Código',
     role: 'Refactorer',
-    model: 'gemini-3-flash-preview',
+    model: 'openclaw',
     icon: 'zap',
     color: '#818CF8',
     expectedFiles: [],
@@ -257,10 +256,8 @@ export class AgentOrchestrator {
     techStack: [],
     decisions: []
   };
-  private modelSource: 'cloud' | 'local' = 'cloud';
 
-  constructor(source: 'cloud' | 'local' = 'cloud') {
-    this.modelSource = source;
+  constructor() {
   }
 
   private async summarizeMemory(): Promise<void> {
@@ -273,8 +270,7 @@ export class AgentOrchestrator {
         body: JSON.stringify({
           prompt: `Resume la siguiente memoria de agentes de forma concisa, manteniendo los puntos clave, decisiones técnicas y estado del proyecto:\n\n${fullMemory}`,
           systemPrompt: "Eres un experto en síntesis de información técnica. Tu objetivo es resumir la memoria de trabajo de un equipo de agentes IA para mantener el contexto relevante y reducir el uso de tokens.",
-          modelType: this.modelSource,
-          agentConfig: { model: this.modelSource === 'local' ? 'llama3' : 'gemini-3-flash-preview' }
+          agentConfig: { model: 'llama3' }
         })
       });
 
@@ -330,7 +326,6 @@ export class AgentOrchestrator {
           body: JSON.stringify({
             prompt,
             systemPrompt,
-            modelType: this.modelSource,
             agentConfig: agent
           })
         });

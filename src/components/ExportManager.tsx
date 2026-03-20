@@ -3,6 +3,7 @@ import { Download, Github, Check, AlertCircle, Loader2, ExternalLink, Shield, Gl
 import { motion, AnimatePresence } from 'motion/react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import { UserSettings } from '../types';
 
 interface ExportManagerProps {
@@ -35,7 +36,7 @@ export const ExportManager: React.FC<ExportManagerProps> = ({ artifacts, project
           setUserSettings(docSnap.data() as UserSettings);
         }
       } catch (err) {
-        console.error("Error fetching settings:", err);
+        handleFirestoreError(err, OperationType.GET, `users/${auth.currentUser.uid}/settings/integrations`);
       } finally {
         setLoadingSettings(false);
       }
@@ -305,15 +306,38 @@ export const ExportManager: React.FC<ExportManagerProps> = ({ artifacts, project
                 <div className="flex-1">
                   <p className="text-sm font-bold">{exportStatus.message}</p>
                   {exportStatus.url && (
-                    <a 
-                      href={exportStatus.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 mt-2 text-xs font-black uppercase tracking-widest hover:underline"
-                    >
-                      Ver en GitHub
-                      <ExternalLink size={12} />
-                    </a>
+                    <div className="mt-4 space-y-4">
+                      <a 
+                        href={exportStatus.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest hover:underline"
+                      >
+                        Ver en GitHub
+                        <ExternalLink size={12} />
+                      </a>
+                      
+                      <div className="p-4 bg-black/40 rounded-xl border border-white/5 space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Comando para clonar:</p>
+                        <div className="flex items-center justify-between gap-4 bg-black/60 p-3 rounded-lg border border-white/10">
+                          <code className="text-xs text-emerald-400 font-mono break-all">
+                            git clone {exportStatus.url}.git
+                          </code>
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText(`git clone ${exportStatus.url}.git`);
+                            }}
+                            className="p-2 hover:bg-white/10 rounded-md transition-colors text-neutral-400 hover:text-white"
+                            title="Copiar comando"
+                          >
+                            <Download size={14} />
+                          </button>
+                        </div>
+                        <p className="text-[8px] text-neutral-600 italic">
+                          Ejecuta este comando en tu terminal (CMD) para descargar el proyecto localmente.
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
                 <button onClick={() => setExportStatus(null)} className="text-neutral-500 hover:text-white">
